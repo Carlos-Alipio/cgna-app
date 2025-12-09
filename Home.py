@@ -5,7 +5,7 @@ import time
 import hashlib # <--- Biblioteca de segurança
 
 # 1. Configuração Inicial
-st.set_page_config(page_title="Sistema Seguro", page_icon="🔒", layout="centered")
+st.set_page_config(page_title="CGNA - GOL", page_icon="🔒", layout="centered")
 
 ARQUIVO_USUARIOS = 'usuarios.csv'
 
@@ -60,7 +60,7 @@ if 'usuario_atual' not in st.session_state:
 
 # 5. Interface
 if not st.session_state['logado']:
-    st.title("🔒 Sistema Corporativo Seguro")
+    st.title("CGNA - GOL")
     
     tab1, tab2 = st.tabs(["Login", "Solicitar Acesso"])
     
