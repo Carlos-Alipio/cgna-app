@@ -18,13 +18,11 @@ BASE_URL = "http://aisweb.decea.mil.br/api/"
 
 # --- FUNÇÕES DO BANCO DE DADOS (AGORA COM POSTGRES) ---
 def salvar_no_banco(df):
-    # O comando .write_pandas do SQLalchemy é mágico
-    # if_exists='append' adiciona sem apagar o histórico (ideal para banco real)
-    # if_exists='replace' apaga e cria de novo (bom para testes)
     try:
-        # Usamos session para garantir a transação
         with conn.session as s:
-            # Pandas to_sql tradicional usando a engine da conexão
+            # if_exists='replace' -> CRUCIAL AGORA: 
+            # Isso vai destruir a tabela antiga (com poucas colunas)
+            # e criar a nova automaticamente com TODAS as colunas do XML.
             df.to_sql('notams', conn.engine, if_exists='replace', index=False, chunksize=1000)
         return True
     except Exception as e:
@@ -41,26 +39,39 @@ def ler_do_banco():
         return pd.DataFrame()
 
 # --- BUSCA NA API (Mesma lógica de antes) ---
+# --- FUNÇÃO DE EXTRAÇÃO (VERSÃO SALVA TUDO) ---
 def buscar_notams(icao_code):
     headers = {'Content-Type': 'application/xml'}
     params = {'apiKey': API_KEY, 'apiPass': API_PASS, 'area': 'notam', 'icaocode': icao_code}
     
-    with st.spinner(f"Baixando dados de {icao_code}..."):
+    with st.spinner(f"Baixando TUDO de {icao_code}..."):
         response = requests.get(BASE_URL, params=params)
     
     if response.status_code == 200:
         dados_dict = xmltodict.parse(response.content)
         try:
-            lista_notams = dados_dict['aisweb']['notam']['item']
+            # Caminho para achar os itens no XML
+            if 'aisweb' in dados_dict and 'notam' in dados_dict['aisweb'] and 'item' in dados_dict['aisweb']['notam']:
+                lista_notams = dados_dict['aisweb']['notam']['item']
+            else:
+                return None
+
+            # Garante que seja lista mesmo se tiver só 1 item
             if isinstance(lista_notams, dict): lista_notams = [lista_notams]
+            
+            # 1. Cria o DataFrame com TODAS as colunas que vierem
             df = pd.DataFrame(lista_notams)
             
-            # Limpeza básica para garantir que colunas de texto não quebrem o SQL
-            colunas_uteis = ['id', 'number', 'tipo', 'dt_iniciovigencia', 'dt_terminovigencia', 'texto']
-            cols = [c for c in colunas_uteis if c in df.columns]
-            return df[cols].astype(str) # Força tudo virar texto para evitar erro de tipo
+            # 2. TRUQUE DE MESTRE: Converter tudo para String (Texto)
+            # O XML tem dados aninhados (dicionários dentro de dicionários).
+            # O PostgreSQL não aceita dicionário Python direto.
+            # Convertendo pra string, garantimos que nada quebra o salvamento.
+            df = df.astype(str)
             
-        except KeyError:
+            return df
+            
+        except Exception as e:
+            st.error(f"Erro ao processar dados: {e}")
             return None
     return None
 
