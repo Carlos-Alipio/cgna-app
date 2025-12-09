@@ -5,7 +5,7 @@ import xmltodict
 from sqlalchemy import text # Necessário para comandos SQL manuais
 
 st.set_page_config(page_title="Extração Supabase", layout="wide")
-st.title("✈️ Importador de NOTAMs (PostgreSQL/Supabase)")
+st.title("✈️ NOTAM AISWEB")
 
 # --- CONFIGURAÇÕES ---
 # Pegando a senha do cofre de segredos (secrets.toml)
@@ -75,28 +75,37 @@ def buscar_notams(icao_code):
             return None
     return None
 
-# --- INTERFACE ---
-col1, col2 = st.columns([1, 2])
+# --- INTERFACE (LAYOUT 1 COLUNA) ---
+st.divider() # Linha divisória visual
 
-with col1:
-    st.subheader("1. Gravar na Nuvem")
-    aeroporto = st.text_input("ICAO", value="SBGR")
-    
-    if st.button("Buscar e Salvar no Supabase"):
+# 1. Área de Controle (Input e Botões)
+st.subheader("✈️ Gerenciador de Dados")
+
+# Usamos colunas APENAS para os botões ficarem alinhados lado a lado, não a página toda
+c1, c2 = st.columns([3, 1]) 
+
+with c1:
+    aeroporto = st.text_input("Código ICAO (Aeroporto)", value="SBGR", help="Ex: SBGR, SBSP, SBRJ")
+
+with c2:
+    st.write("") # Espaço vazio para alinhar o botão verticalmente com a caixa de texto
+    st.write("") 
+    if st.button("🔄 Buscar e Atualizar", type="primary", use_container_width=True):
         df_novo = buscar_notams(aeroporto)
         if df_novo is not None and not df_novo.empty:
-            sucesso = salvar_no_banco(df_novo)
-            if sucesso:
-                st.success("✅ Dados salvos no Supabase com sucesso!")
+            salvar_no_banco(df_novo)
+            st.success("Banco atualizado!")
+            st.rerun() # Recarrega a página para mostrar os dados novos
         else:
-            st.warning("Nada encontrado.")
+            st.warning("Nenhum dado encontrado.")
 
-with col2:
-    st.subheader("2. Ler da Nuvem")
-    st.write("Dados vindo direto do Data Center em São Paulo.")
+# 2. Visualização dos Dados (Ocupa a largura total agora)
+df_banco = ler_do_banco()
+
+if not df_banco.empty:
+    st.markdown(f"### 📋 Base de Dados Completa ({len(df_banco)} registros)")
     
-    df_banco = ler_do_banco()
-    if not df_banco.empty:
-        st.dataframe(df_banco)
-    else:
-        st.info("Banco vazio.")
+    # use_container_width=True garante que estique até a borda
+    st.dataframe(df_banco, use_container_width=True, height=600) 
+else:
+    st.info("O banco de dados está vazio. Busque um aeroporto acima.")
