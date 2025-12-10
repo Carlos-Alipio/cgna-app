@@ -9,16 +9,30 @@ def get_connection():
 def salvar_notams(df):
     conn = get_connection()
     try:
+        # Abre a sessão
         with conn.session as s:
-            df.to_sql('notams', conn.engine, if_exists='replace', index=False, chunksize=1000)
+            # Dica de Performance:
+            # 1. method='multi': Envia várias linhas em um único comando SQL (muito mais rápido)
+            # 2. chunksize=500: Envia de 500 em 500 para não travar a memória
+            
+            with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
+                df.to_sql(
+                    'notams', 
+                    conn.engine, 
+                    if_exists='replace', 
+                    index=False, 
+                    chunksize=500, # Tamanho ideal para internet comum
+                    method='multi' # Turbo mode para SQL
+                )
         return True
     except Exception as e:
-        st.error(f"Erro no Banco: {e}")
+        st.error(f"Erro ao salvar no Banco: {e}")
         return False
 
 def carregar_notams():
     conn = get_connection()
     try:
+        # ttl=0 garante que não pegue cache velho
         return conn.query('SELECT * FROM notams', ttl=0)
     except:
         return pd.DataFrame()
