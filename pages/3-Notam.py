@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timezone # <--- Adicionado para pegar a hora UTC
 
 # Importando módulos da pasta utils
 from utils import db_manager, api_decea, formatters
@@ -42,8 +43,13 @@ with st.container(border=True):
     # --- COLUNA 2: STATUS DA ESTRATÉGIA ---
     with c_status:
         qtd_frota = len(meus_aeroportos)
+        
+        # Pega a hora atual em UTC para mostrar na legenda
+        hora_utc = datetime.now(timezone.utc).strftime("%H:%M UTC")
+        
         if qtd_frota > 0:
-            st.caption(f"📡 Baixando dados da AISWEB - **{qtd_frota} Aeroportos** configurados.")
+            # --- MUDANÇA AQUI: Adicionada a hora UTC na frase ---
+            st.caption(f"📡 Status AISWEB: **{qtd_frota} Aeroportos** configurados. (Ref: {hora_utc})")
         else:
             st.error("⚠️ **Alerta:** Nenhuma Aeroporto configurado. O banco ficará vazio.")
             st.caption("Vá em 'Configurações' para adicionar aeroportos.")
@@ -53,15 +59,13 @@ with st.container(border=True):
         if not df_total.empty:
             # Pega a data do registro mais recente
             ultimo_dt = df_total['dt'].max() if 'dt' in df_total.columns else "-"
-            
-            # --- MUDANÇA AQUI: Removemos o .split(' ')[0] para mostrar a hora completa ---
+            # Formata a data completa para o delta
             data_fmt = formatters.formatar_data_notam(ultimo_dt)
-            # -----------------------------------------------------------------------------
             
             st.metric(
                 label="NOTAMs Armazenados", 
                 value=len(df_total),
-                delta=f"Atualizado: {data_fmt}", # Agora mostra Data e Hora
+                delta=f"Último dado: {data_fmt}",
                 delta_color="off"
             )
         else:
@@ -306,4 +310,9 @@ if not df_total.empty:
             st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    st.info("Banco vazio. Clique em 'Sincronizar Aeroportos' para baixar os dados.")
+    # Se o banco estiver vazio, verifica a lista para dar a dica certa
+    if not meus_aeroportos:
+        st.warning("⚠️ Você não tem aeroportos configurados.")
+        st.info("Vá no menu 'Configurações' e adicione os códigos ICAO (ex: SBGR, SBRJ) que deseja monitorar.")
+    else:
+        st.info("Banco de dados vazio. Clique em 'Sincronizar Aeroportos' para baixar os dados.")
