@@ -138,19 +138,36 @@ df_banco = ler_do_banco()
 if not df_banco.empty:
     st.markdown(f"### 📋 Registros ({len(df_banco)})")
 
-    # CRIAÇÃO DAS COLUNAS (O SEGREDO ESTÁ AQUI)
-    # col_tabela = Onde fica a lista (fica maior)
-    # col_detalhes = O painel da direita (fica menor)
     col_tabela, col_detalhes = st.columns([0.65, 0.35], gap="large")
 
     with col_tabela:
+        # --- NOVIDADE: SELETOR DE COLUNAS ---
+        # 1. Definimos quais colunas queremos ver de início
+        # (Adapte esta lista se quiser outras como padrão)
+        colunas_sugeridas = ['loc', 'b', 'c', 'tp', 'n', 'cod']
+        
+        # Filtramos para garantir que essas colunas realmente existem no banco
+        # (Isso evita erro se o XML mudar um dia)
+        padrao = [c for c in colunas_sugeridas if c in df_banco.columns]
+        
+        # 2. O Multiselect
+        cols_visiveis = st.multiselect(
+            "👁️ Colunas visíveis:",
+            options=df_banco.columns,
+            default=padrao,
+            placeholder="Escolha as colunas..."
+        )
+        
+        # 3. Criamos uma "view" apenas com as colunas escolhidas
+        # Se o usuário tirar tudo, mostramos o padrão para não quebrar
+        df_exibicao = df_banco[cols_visiveis] if cols_visiveis else df_banco[padrao]
+        
+        # ------------------------------------
+
         st.caption("Selecione uma linha para ver detalhes 👉")
         
-        # EVENTO DE SELEÇÃO
-        # on_select="rerun" -> Faz o app recarregar assim que você clica
-        # selection_mode="single-row" -> Só deixa clicar em um por vez
         evento = st.dataframe(
-            df_banco,
+            df_exibicao,
             use_container_width=True,
             height=600,
             on_select="rerun",
@@ -159,19 +176,24 @@ if not df_banco.empty:
         )
 
     with col_detalhes:
-        # Verifica se alguém clicou em alguma linha
         if len(evento.selection.rows) > 0:
-            # Pega o número da linha clicada (índice)
-            indice_clicado = evento.selection.rows[0]
+            # --- O PULO DO GATO ---
+            # 1. Pegamos qual linha visual foi clicada (ex: linha 0, 1, 2...)
+            posicao_visual = evento.selection.rows[0]
             
-            # Pega os dados daquela linha específica no DataFrame
-            dados_linha = df_banco.iloc[indice_clicado]
+            # 2. Descobrimos qual é o ÍNDICE REAL dessa linha no dataframe exibido
+            indice_real = df_exibicao.index[posicao_visual]
+            
+            # 3. Usamos o .loc (pelo índice) para buscar os dados no BANCO COMPLETO (df_banco)
+            # Assim, mesmo que a coluna 'e' (texto) esteja oculta na tabela,
+            # conseguimos pegar ela aqui para exibir nos detalhes!
+            dados_linha = df_banco.loc[indice_real]
+            # ----------------------
 
             # --- DESENHANDO O PAINEL DE DETALHES ---
             st.caption("📌 Detalhes do NOTAM")
             c_localidade, c_notam = st.columns(2)
 
-            # Tenta pegar o ID ou Número (trata erro caso a coluna mude de nome)
             id_notam = dados_linha.get('loc', 'S/N')
             num_notam = dados_linha.get('n', 'S/N')
             
@@ -185,11 +207,8 @@ if not df_banco.empty:
             
             st.markdown("---")
             
-            # Pegamos os campos crus (Item B e Item C do NOTAM)
             raw_inicio = dados_linha.get('b', '')
             raw_fim = dados_linha.get('c', '')
-
-            # Aplicamos a formatação
             data_inicio = formatar_data_notam(raw_inicio)
             data_fim = formatar_data_notam(raw_fim)
 
@@ -197,24 +216,22 @@ if not df_banco.empty:
             c_inicio, c_fim = st.columns(2)
             
             with c_inicio:
-                st.caption("Início (B)")  # O título cinza pequeno
-                st.markdown(f"#### {data_inicio}") # Texto em destaque médio
+                st.caption("Início (B)")
+                st.markdown(f"#### {data_inicio}") 
 
             with c_fim:
                 st.caption("Fim (C)")
-                # Se for PERM, pinta de vermelho usando sintaxe de cor do Streamlit
                 if "PERM" in data_fim:
                     st.markdown(f"#### :red[{data_fim}]") 
                 else:
                     st.markdown(f"#### {data_fim}")
 
             st.markdown("---")
-            #st.write("**📝 Texto do NOTAM:**")
             st.caption("**📝 Texto do NOTAM:**")
             
-            # Caixa de texto cinza para destacar a mensagem
+            # Pega o texto 'e' (mesmo que não esteja selecionado no multiselect acima)
             texto_notam = dados_linha.get('e', 'Sem texto')
-            #st.code(texto_notam, language="text")
+            
             st.markdown(
                 f"""
                 <div style='
@@ -233,12 +250,10 @@ if not df_banco.empty:
 
             st.markdown("---")
 
-            # Mostra todos os outros dados brutos num expander (para curiosidade)
             with st.expander("Ver dados brutos (JSON)"):
                 st.json(dados_linha.to_dict())
                 
         else:
-            # Mensagem quando nada está selecionado
             st.warning("👈 Clique em uma linha na tabela para ver o painel de detalhes aqui.")
             
 else:
