@@ -5,7 +5,21 @@ import time
 import hashlib # <--- Biblioteca de segurança
 
 # 1. Configuração Inicial
-st.set_page_config(page_title="CGNA - GOL", page_icon="🔒", layout="centered")
+st.set_page_config(page_title="CGNA - GOL", 
+                   page_icon="🔒", 
+                   layout="centered", 
+                   initial_sidebar_state="collapsed")
+
+# Se NÃO estiver logado, esconde a barra lateral visualmente
+if 'logado' not in st.session_state or not st.session_state['logado']:
+    st.markdown(
+        """
+        <style>
+            [data-testid="stSidebar"] {display: none;}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
 ARQUIVO_USUARIOS = 'usuarios.csv'
 

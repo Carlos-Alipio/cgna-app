@@ -7,6 +7,16 @@ from sqlalchemy import text # Necessário para comandos SQL manuais
 st.set_page_config(page_title="Extração Supabase", layout="wide")
 st.title("✈️ NOTAM AISWEB")
 
+# --- 🔒 BLOCO DE SEGURANÇA (COLE ISSO NO TOPO DAS PÁGINAS) ---
+if 'logado' not in st.session_state or not st.session_state['logado']:
+    st.set_page_config(layout="centered") # Força layout pequeno
+    st.error("⛔ **Acesso Negado!**")
+    st.info("Você precisa fazer login para acessar o sistema de dados.")
+    st.stop() # <--- O COMANDO MÁGICO: Para de rodar o código aqui.
+# -------------------------------------------------------------
+
+# ... Daqui para baixo fica o seu código normal (st.set_page_config, st.title, etc) ...
+
 # --- CONFIGURAÇÕES ---
 # Pegando a senha do cofre de segredos (secrets.toml)
 # O nome "supabase" aqui deve ser o mesmo que você colocou nos colchetes [connections.supabase]
@@ -85,12 +95,12 @@ st.subheader("✈️ Gerenciador de Dados")
 c1, c2 = st.columns([3, 1]) 
 
 with c1:
-    aeroporto = st.text_input("Código ICAO (Aeroporto)", value="SBGR", help="Ex: SBGR, SBSP, SBRJ")
+    aeroporto = st.text_input("Código ICAO (Aeroporto)", value="", help="Ex: SBGR, SBSP, SBRJ")
 
 with c2:
     st.write("") # Espaço vazio para alinhar o botão verticalmente com a caixa de texto
     st.write("") 
-    if st.button("🔄 Buscar e Atualizar", type="primary", use_container_width=True):
+    if st.button("Atualizar", type="primary", use_container_width=True):
         df_novo = buscar_notams(aeroporto)
         if df_novo is not None and not df_novo.empty:
             salvar_no_banco(df_novo)
