@@ -65,7 +65,7 @@ with st.container(border=True):
             st.metric(
                 label="NOTAMs Armazenados", 
                 value=len(df_total),
-                delta=f"Último dado: {data_fmt}",
+                delta=f"Último notam Adicionado: {data_fmt}",
                 delta_color="off"
             )
         else:
