@@ -12,84 +12,97 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
     st.error("Acesso Negado.")
     st.stop()
 
+# Inicializa state para highlight
+if 'novos_ids' not in st.session_state:
+    st.session_state['novos_ids'] = []
+
 st.divider()
 
-# 1. CARREGAR DADOS (Carregamos ANTES para calcular as métricas)
+# ==============================================================================
+# 1. CARREGAR DADOS E CONFIGURAÇÕES
+# ==============================================================================
 df_total = db_manager.carregar_notams()
 meus_aeroportos = db_manager.carregar_frota_monitorada()
 
 # ==============================================================================
-# 🕹️ PAINEL DE CONTROLE E STATUS
+# 2. CONTROLE DE ATUALIZAÇÃO (FILTER-BEFORE-SAVE)
 # ==============================================================================
-with st.container(border=True):
-    col_metrics, col_btn = st.columns([0.75, 0.25], gap="large", vertical_alignment="center")
-    
-    with col_metrics:
-        m1, m2, m3 = st.columns(3)
-        
-        # Métrica 1: Base Total
-        m1.metric("Todas as Bases", len(df_total), help="Total bruto armazenado no banco.")
+col_btn, col_info = st.columns([1, 3])
 
-        # --- CONTROLE DE VISUALIZAÇÃO (Métrica 3 vira um Controle) ---
-        with m3:
-            st.write("**Modo de Visualização:**")
-            # O Toggle define se filtramos ou não
-            filtrar_frota = st.toggle("🎯 Apenas Bases GOL", value=True, disabled=(not meus_aeroportos))
-            
-            if not meus_aeroportos:
-                st.caption("⚠️ Lista de frota vazia.")
-
-        # --- LÓGICA DE FILTRAGEM ---
-        if not df_total.empty:
-            if filtrar_frota and meus_aeroportos:
-                df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)].copy()
-                label_modo = f"Base GOL ({len(meus_aeroportos)} ADs)"
-            else:
-                df_filtrado = df_total.copy()
-                label_modo = "Brasil Completo (Todas FIRs)"
+with col_btn:
+    # Botão agora chama a função das FIRs
+    if st.button("🔄 Atualizar Base Brasil", type="primary", use_container_width=True):
+        if not meus_aeroportos:
+            st.warning("⚠️ Adicione aeroportos em 'Configurações' antes de atualizar.")
         else:
-            df_filtrado = pd.DataFrame()
-            label_modo = "-"
+            # 1. Snapshot dos IDs antigos
+            ids_antigos = set(df_total['id'].astype(str).tolist()) if not df_total.empty and 'id' in df_total.columns else set()
 
-        # Métrica 2: O que está na tela agora
-        percentual = (len(df_filtrado)/len(df_total)) if len(df_total) > 0 else 0
-        m2.metric(
-            label="Visualizando Agora", 
-            value=len(df_filtrado),
-            delta=f"{percentual:.1%} da base",
-            help=f"Modo atual: {label_modo}"
-        )
+            # 2. Busca o BRASIL TODO (5 FIRs)
+            df_brasil = api_decea.buscar_firs_brasil()
+            
+            if df_brasil is not None and not df_brasil.empty:
+                
+                # --- FILTRO CRÍTICO ---
+                # Só mantemos o que está na nossa lista de interesse
+                df_salvar = df_brasil[df_brasil['loc'].isin(meus_aeroportos)].copy()
+                # ----------------------
 
-    with col_btn:
-        st.write("") # Espaço para alinhar
-        if st.button("🔄 Atualizar", type="primary", use_container_width=True):
-            df_novo = api_decea.buscar_firs_brasil()
-            if df_novo is not None:
-                db_manager.salvar_notams(df_novo)
-                st.success("Atualizado!")
-                st.rerun()
-
-st.write("") # Respiro visual
+                if not df_salvar.empty:
+                    # 3. Salva apenas o filtrado no banco
+                    db_manager.salvar_notams(df_salvar)
+                    
+                    # 4. Calcula diferença (Highlight)
+                    if 'id' in df_salvar.columns:
+                        ids_atuais = set(df_salvar['id'].astype(str).tolist())
+                        diferenca = ids_atuais - ids_antigos
+                        st.session_state['novos_ids'] = list(diferenca)
+                        qtd_novos = len(diferenca)
+                    else:
+                        qtd_novos = 0
+                    
+                    msg_extra = f"🎉 {qtd_novos} novos!" if qtd_novos > 0 else ""
+                    st.success(f"Filtro aplicado! De {len(df_brasil)} baixados, salvamos {len(df_salvar)} da sua frota. {msg_extra}")
+                    st.rerun()
+                else:
+                    st.warning(f"Baixamos {len(df_brasil)} NOTAMs do Brasil, mas nenhum deles é dos aeroportos da sua lista.")
+            
+            elif df_brasil is not None:
+                st.warning("A API do DECEA não retornou dados.")
+            else:
+                st.error("Falha na conexão com o DECEA.")
 
 # ==============================================================================
-# ÁREA DE DADOS
+# 3. EXIBIÇÃO DOS DADOS
 # ==============================================================================
 
-if not df_filtrado.empty:
+if not df_total.empty:
     
+    # O banco já está filtrado, então mostramos tudo que tem nele
+    df_filtrado = df_total.copy()
+
+    with col_info:
+        novos_visiveis = 0
+        if 'id' in df_filtrado.columns:
+            novos_visiveis = df_filtrado['id'].astype(str).isin(st.session_state['novos_ids']).sum()
+            
+        delta_msg = f"+{novos_visiveis} Novos" if novos_visiveis > 0 else "Atualizado"
+        st.metric("NOTAMs Ativos (Frota)", len(df_filtrado), delta=delta_msg)
+
+    st.divider()
+
     # Layout Master-Detail
     col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large")
 
     with col_tabela:
-        # --- ORDENAÇÃO INICIAL ---
+        # Ordenação
         if 'dt' in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
         # --- FILTROS AVANÇADOS ---
-        with st.expander(f"🔎 Filtros Avançados ({label_modo})", expanded=True):
+        with st.expander("🔎 Filtros Locais", expanded=True):
             f1, f2, f3 = st.columns(3)
             
-            # Filtros dinâmicos baseados no DF já filtrado (Frota ou Brasil)
             locs_disponiveis = sorted(df_filtrado['loc'].unique())
             sel_loc = f1.multiselect("📍 Localidade (loc)", locs_disponiveis)
             
@@ -109,7 +122,7 @@ if not df_filtrado.empty:
 
             txt_busca = f5.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
 
-        # --- APLICAÇÃO DOS FILTROS ---
+        # Aplicação dos Filtros
         df_view = df_filtrado.copy()
 
         if sel_loc: df_view = df_view[df_view['loc'].isin(sel_loc)]
@@ -118,7 +131,7 @@ if not df_filtrado.empty:
         if sel_cond: df_view = df_view[df_view['condicao_desc'].isin(sel_cond)]
         if txt_busca: df_view = df_view[df_view['e'].astype(str).str.contains(txt_busca, case=False, na=False)]
 
-        # Formatação Data
+        # Formatação Visual Data
         if 'dt' in df_view.columns:
             df_view['dt'] = df_view['dt'].apply(formatters.formatar_data_notam)
 
@@ -127,10 +140,32 @@ if not df_filtrado.empty:
         
         st.caption(f"Exibindo {len(df_view)} registros")
 
+        # Função de Estilo
+        def realcar_novos(row):
+            cor = ''
+            if 'id' in row.index:
+                notam_id = str(row['id'])
+                if notam_id in st.session_state['novos_ids']:
+                    cor = 'background-color: #d1e7dd; color: #0f5132; font-weight: bold'
+            return [cor] * len(row)
+
+        # Prepara dados para exibição
+        cols_final = list(cols_validas)
+        if 'id' not in cols_final:
+            cols_final.append('id')
+            
+        styler = df_view[cols_final].style.apply(realcar_novos, axis=1)
+        
+        column_config = {"id": None} # Esconde ID
+
         evento = st.dataframe(
-            df_view[cols_validas],
-            use_container_width=True, height=600,
-            on_select="rerun", selection_mode="single-row", hide_index=True
+            styler,
+            column_config=column_config,
+            use_container_width=True, 
+            height=600,
+            on_select="rerun", 
+            selection_mode="single-row",
+            hide_index=True
         )
 
     # --- PAINEL DE DETALHES ---
@@ -140,6 +175,10 @@ if not df_filtrado.empty:
             dados = df_view.iloc[idx]
 
             st.markdown("### 📌 Detalhes do NOTAM")
+            
+            if str(dados.get('id')) in st.session_state['novos_ids']:
+                st.success("✨ ESTE NOTAM É NOVO! (Acabou de chegar)")
+
             st.divider()
 
             st.markdown(f"**Localidade (loc):**")
@@ -219,4 +258,8 @@ if not df_filtrado.empty:
             st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    st.info("Banco vazio. Clique em 'Atualizar Base Brasil' para baixar os dados.")
+    if not meus_aeroportos:
+        st.warning("⚠️ Você não tem aeroportos configurados.")
+        st.info("Vá no menu 'Configurações' e adicione os códigos ICAO.")
+    else:
+        st.info("Banco de dados vazio. Clique em 'Atualizar Base Brasil'.")
