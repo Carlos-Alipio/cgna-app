@@ -63,7 +63,7 @@ with st.container(border=True):
             data_fmt = formatters.formatar_data_notam(ultimo_dt)
             
             st.metric(
-                label="NOTAMs Armazenados", 
+                label="NOTAMs monitorados:", 
                 value=len(df_total),
                 delta=f"Último notam Adicionado: {data_fmt}",
                 delta_color="off"
