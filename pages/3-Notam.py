@@ -28,13 +28,13 @@ with st.container(border=True):
         m1, m2, m3 = st.columns(3)
         
         # Métrica 1: Base Total
-        m1.metric("Base Total (Brasil)", len(df_total), help="Total bruto armazenado no banco.")
+        m1.metric("Todas as Bases", len(df_total), help="Total bruto armazenado no banco.")
 
         # --- CONTROLE DE VISUALIZAÇÃO (Métrica 3 vira um Controle) ---
         with m3:
             st.write("**Modo de Visualização:**")
             # O Toggle define se filtramos ou não
-            filtrar_frota = st.toggle("🎯 Apenas Minha Frota", value=True, disabled=(not meus_aeroportos))
+            filtrar_frota = st.toggle("🎯 Apenas Bases gol", value=True, disabled=(not meus_aeroportos))
             
             if not meus_aeroportos:
                 st.caption("⚠️ Lista de frota vazia.")
@@ -43,7 +43,7 @@ with st.container(border=True):
         if not df_total.empty:
             if filtrar_frota and meus_aeroportos:
                 df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)].copy()
-                label_modo = f"Minha Frota ({len(meus_aeroportos)} ADs)"
+                label_modo = f"Base GOL ({len(meus_aeroportos)} ADs)"
             else:
                 df_filtrado = df_total.copy()
                 label_modo = "Brasil Completo (Todas FIRs)"
