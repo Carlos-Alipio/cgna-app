@@ -14,33 +14,75 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 
 st.divider()
 
-# 1. CONTROLE DE ATUALIZAÇÃO
-col_btn, col_info = st.columns([1, 3])
-with col_btn:
-    if st.button("🔄 Atualizar", type="primary", use_container_width=True):
-        df_novo = api_decea.buscar_firs_brasil()
-        if df_novo is not None:
-            db_manager.salvar_notams(df_novo)
-            st.success(f"Base atualizada! {len(df_novo)} NOTAMs.")
-            st.rerun()
+# ... (código de segurança anterior) ...
 
-# 2. CARREGAR DADOS
+# 2. CARREGAR DADOS (Carregamos ANTES de desenhar o painel para ter os números)
 df_total = db_manager.carregar_notams()
 meus_aeroportos = db_manager.carregar_frota_monitorada()
 
 if not df_total.empty:
-    
     # Filtro de Frota (Regra de Negócio)
     if meus_aeroportos:
         df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)].copy()
+        modo_filtro = "Visualização Personalizada"
     else:
-        st.warning("⚠️ Lista de monitoramento vazia.")
         df_filtrado = df_total.copy()
+        modo_filtro = "Todos os Notams"
+else:
+    df_filtrado = pd.DataFrame()
+    modo_filtro = "-"
 
-    with col_info:
-        st.metric("NOTAMs do Filtro", len(df_filtrado), delta=f"Total AISWEB: {len(df_total)}")
+# ==============================================================================
+# 1. 🕹️ PAINEL DE CONTROLE (LAYOUT MELHORADO)
+# ==============================================================================
+with st.container(border=True):
+    # Dividimos em: Métricas (Esquerda) e Ação (Direita)
+    col_metrics, col_btn = st.columns([0.75, 0.25], gap="large", vertical_alignment="center")
+    
+    with col_metrics:
+        # Sub-colunas para as métricas ficarem lado a lado
+        m1, m2, m3 = st.columns(3)
+        
+        # Métrica 1: Total Geral
+        m1.metric(
+            label="📦 Base Total (Brasil)", 
+            value=len(df_total),
+            help="Total de NOTAMs armazenados no banco de dados (todas as FIRs)."
+        )
+        
+        # Métrica 2: Filtro Atual
+        delta_val = f"{(len(df_filtrado)/len(df_total)):.1%} da base" if len(df_total) > 0 else None
+        m2.metric(
+            label=f"🎯 Visualizando ({len(meus_aeroportos)} ADs)", 
+            value=len(df_filtrado), 
+            delta=delta_val,
+            help="NOTAMs filtrados apenas para a sua lista de aeroportos configurada."
+        )
 
-    st.divider()
+        # Métrica 3: Status
+        m3.markdown(f"**Modo:** `{modo_filtro}`")
+        if not df_total.empty:
+            # Pega a data mais recente do banco para mostrar "Última atualização"
+            if 'dt' in df_total.columns:
+                ultima_data = df_total['dt'].max() # Pega a maior data bruta
+                # Formata apenas visualmente
+                m3.caption(f"📅 Dados de: {formatters.formatar_data_notam(ultima_data)}")
+
+    with col_btn:
+        # Botão destacado na direita
+        st.write("") # Espaçamento para alinhar verticalmente
+        if st.button("🔄 Atualizar Base (API)", type="primary", use_container_width=True, help="Baixa novamente as 5 FIRs do DECEA e atualiza o banco."):
+            df_novo = api_decea.buscar_firs_brasil()
+            if df_novo is not None:
+                db_manager.salvar_notams(df_novo)
+                st.success("Atualizado!")
+                st.rerun()
+
+st.write("") # Espaço respiro antes da tabela
+
+if not df_total.empty:
+    # ... (O código continua daqui para baixo com 'st.divider()', 'Layout Master-Detail' etc) ...
+
 
     # Layout Master-Detail
     col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large")
@@ -51,10 +93,11 @@ if not df_total.empty:
             df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
         # ==============================================================================
-        # 🕵️‍♂️ ÁREA DE FILTROS AVANÇADOS
+        # 🕵️‍♂️ ÁREA DE FILTROS AVANÇADOS (LAYOUT OTIMIZADO)
         # ==============================================================================
         with st.expander("🔎 Filtros Avançados", expanded=True):
-            f1, f2 = st.columns(2)
+            # Linha 1: Localidade, Número e Assunto (3 colunas)
+            f1, f2, f3 = st.columns(3)
             
             # 1. Localidade (Multiselect)
             locs_disponiveis = sorted(df_filtrado['loc'].unique())
@@ -63,17 +106,16 @@ if not df_total.empty:
             # 2. Número (Texto)
             txt_num = f2.text_input("🔢 Número (n)", placeholder="Ex: 1234")
 
-            f3, f4 = st.columns(2)
-            
             # 3. Assunto (Multiselect)
             assuntos_disp = sorted(df_filtrado['assunto_desc'].unique())
             sel_subj = f3.multiselect("📂 Assunto", assuntos_disp)
 
+            # Linha 2: Condição e Texto (2 colunas)
+            f4, f5 = st.columns(2)
+
             # 4. Condição (CONDICIONAL ao Assunto)
-            # Se houver assunto selecionado, mostra apenas as condições daquele assunto.
-            # Se não, mostra todas as condições disponíveis.
+            # Lógica: Se escolheu Assunto, mostra só as condições daquele assunto
             if sel_subj:
-                # Filtra o dataframe temporariamente só para pegar as condições válidas
                 conds_validas = df_filtrado[df_filtrado['assunto_desc'].isin(sel_subj)]['condicao_desc'].unique()
             else:
                 conds_validas = df_filtrado['condicao_desc'].unique()
@@ -81,7 +123,7 @@ if not df_total.empty:
             sel_cond = f4.multiselect("🔧 Condição", sorted(conds_validas))
 
             # 5. Texto (Texto)
-            txt_busca = st.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
+            txt_busca = f5.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
 
         # --- APLICAÇÃO DOS FILTROS (Lógica em Cascata) ---
         df_view = df_filtrado.copy()
@@ -148,6 +190,7 @@ if not df_total.empty:
             st.write("")
 
             st.markdown(f"**Assunto:**")
+            # Sua personalização: cor verde
             st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
             cond = dados.get('condicao_desc', 'N/A')

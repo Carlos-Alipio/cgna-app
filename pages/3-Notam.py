@@ -14,76 +14,69 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 
 st.divider()
 
-# ... (código de segurança anterior) ...
-
-# 2. CARREGAR DADOS (Carregamos ANTES de desenhar o painel para ter os números)
+# 1. CARREGAR DADOS (Carregamos ANTES para calcular as métricas)
 df_total = db_manager.carregar_notams()
 meus_aeroportos = db_manager.carregar_frota_monitorada()
 
-if not df_total.empty:
-    # Filtro de Frota (Regra de Negócio)
-    if meus_aeroportos:
-        df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)].copy()
-        modo_filtro = "Frota Monitorada"
-    else:
-        df_filtrado = df_total.copy()
-        modo_filtro = "Sem Filtro (Tudo)"
-else:
-    df_filtrado = pd.DataFrame()
-    modo_filtro = "-"
-
 # ==============================================================================
-# 1. 🕹️ PAINEL DE CONTROLE (LAYOUT MELHORADO)
+# 🕹️ PAINEL DE CONTROLE E STATUS
 # ==============================================================================
 with st.container(border=True):
-    # Dividimos em: Métricas (Esquerda) e Ação (Direita)
     col_metrics, col_btn = st.columns([0.75, 0.25], gap="large", vertical_alignment="center")
     
     with col_metrics:
-        # Sub-colunas para as métricas ficarem lado a lado
         m1, m2, m3 = st.columns(3)
         
-        # Métrica 1: Total Geral
-        m1.metric(
-            label="📦 Base Total (Brasil)", 
-            value=len(df_total),
-            help="Total de NOTAMs armazenados no banco de dados (todas as FIRs)."
-        )
-        
-        # Métrica 2: Filtro Atual
-        delta_val = f"{(len(df_filtrado)/len(df_total)):.1%} da base" if len(df_total) > 0 else None
-        m2.metric(
-            label=f"🎯 Visualizando ({len(meus_aeroportos)} ADs)", 
-            value=len(df_filtrado), 
-            delta=delta_val,
-            help="NOTAMs filtrados apenas para a sua lista de aeroportos configurada."
-        )
+        # Métrica 1: Base Total
+        m1.metric("📦 Base Total (Brasil)", len(df_total), help="Total bruto armazenado no banco.")
 
-        # Métrica 3: Status
-        m3.markdown(f"**Modo:** `{modo_filtro}`")
+        # --- CONTROLE DE VISUALIZAÇÃO (Métrica 3 vira um Controle) ---
+        with m3:
+            st.write("👀 **Modo de Visualização:**")
+            # O Toggle define se filtramos ou não
+            filtrar_frota = st.toggle("🎯 Apenas Minha Frota", value=True, disabled=(not meus_aeroportos))
+            
+            if not meus_aeroportos:
+                st.caption("⚠️ Lista de frota vazia.")
+
+        # --- LÓGICA DE FILTRAGEM ---
         if not df_total.empty:
-            # Pega a data mais recente do banco para mostrar "Última atualização"
-            if 'dt' in df_total.columns:
-                ultima_data = df_total['dt'].max() # Pega a maior data bruta
-                # Formata apenas visualmente
-                m3.caption(f"📅 Dados de: {formatters.formatar_data_notam(ultima_data)}")
+            if filtrar_frota and meus_aeroportos:
+                df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)].copy()
+                label_modo = f"Minha Frota ({len(meus_aeroportos)} ADs)"
+            else:
+                df_filtrado = df_total.copy()
+                label_modo = "Brasil Completo (Todas FIRs)"
+        else:
+            df_filtrado = pd.DataFrame()
+            label_modo = "-"
+
+        # Métrica 2: O que está na tela agora
+        percentual = (len(df_filtrado)/len(df_total)) if len(df_total) > 0 else 0
+        m2.metric(
+            label="📊 Visualizando Agora", 
+            value=len(df_filtrado),
+            delta=f"{percentual:.1%} da base",
+            help=f"Modo atual: {label_modo}"
+        )
 
     with col_btn:
-        # Botão destacado na direita
-        st.write("") # Espaçamento para alinhar verticalmente
-        if st.button("🔄 Atualizar Base (API)", type="primary", use_container_width=True, help="Baixa novamente as 5 FIRs do DECEA e atualiza o banco."):
+        st.write("") # Espaço para alinhar
+        if st.button("🔄 Atualizar Base (API)", type="primary", use_container_width=True):
             df_novo = api_decea.buscar_firs_brasil()
             if df_novo is not None:
                 db_manager.salvar_notams(df_novo)
                 st.success("Atualizado!")
                 st.rerun()
 
-st.write("") # Espaço respiro antes da tabela
+st.write("") # Respiro visual
 
-if not df_total.empty:
-    # ... (O código continua daqui para baixo com 'st.divider()', 'Layout Master-Detail' etc) ...
+# ==============================================================================
+# ÁREA DE DADOS
+# ==============================================================================
 
-
+if not df_filtrado.empty:
+    
     # Layout Master-Detail
     col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large")
 
@@ -92,29 +85,21 @@ if not df_total.empty:
         if 'dt' in df_filtrado.columns:
             df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
-        # ==============================================================================
-        # 🕵️‍♂️ ÁREA DE FILTROS AVANÇADOS (LAYOUT OTIMIZADO)
-        # ==============================================================================
-        with st.expander("🔎 Filtros Avançados", expanded=True):
-            # Linha 1: Localidade, Número e Assunto (3 colunas)
+        # --- FILTROS AVANÇADOS ---
+        with st.expander(f"🔎 Filtros Avançados ({label_modo})", expanded=True):
             f1, f2, f3 = st.columns(3)
             
-            # 1. Localidade (Multiselect)
+            # Filtros dinâmicos baseados no DF já filtrado (Frota ou Brasil)
             locs_disponiveis = sorted(df_filtrado['loc'].unique())
             sel_loc = f1.multiselect("📍 Localidade (loc)", locs_disponiveis)
             
-            # 2. Número (Texto)
             txt_num = f2.text_input("🔢 Número (n)", placeholder="Ex: 1234")
 
-            # 3. Assunto (Multiselect)
             assuntos_disp = sorted(df_filtrado['assunto_desc'].unique())
             sel_subj = f3.multiselect("📂 Assunto", assuntos_disp)
 
-            # Linha 2: Condição e Texto (2 colunas)
             f4, f5 = st.columns(2)
 
-            # 4. Condição (CONDICIONAL ao Assunto)
-            # Lógica: Se escolheu Assunto, mostra só as condições daquele assunto
             if sel_subj:
                 conds_validas = df_filtrado[df_filtrado['assunto_desc'].isin(sel_subj)]['condicao_desc'].unique()
             else:
@@ -122,41 +107,26 @@ if not df_total.empty:
                 
             sel_cond = f4.multiselect("🔧 Condição", sorted(conds_validas))
 
-            # 5. Texto (Texto)
             txt_busca = f5.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
 
-        # --- APLICAÇÃO DOS FILTROS (Lógica em Cascata) ---
+        # --- APLICAÇÃO DOS FILTROS ---
         df_view = df_filtrado.copy()
 
-        if sel_loc:
-            df_view = df_view[df_view['loc'].isin(sel_loc)]
-        
-        if txt_num:
-            # Converte para string e busca parcial
-            df_view = df_view[df_view['n'].astype(str).str.contains(txt_num, case=False, na=False)]
+        if sel_loc: df_view = df_view[df_view['loc'].isin(sel_loc)]
+        if txt_num: df_view = df_view[df_view['n'].astype(str).str.contains(txt_num, case=False, na=False)]
+        if sel_subj: df_view = df_view[df_view['assunto_desc'].isin(sel_subj)]
+        if sel_cond: df_view = df_view[df_view['condicao_desc'].isin(sel_cond)]
+        if txt_busca: df_view = df_view[df_view['e'].astype(str).str.contains(txt_busca, case=False, na=False)]
 
-        if sel_subj:
-            df_view = df_view[df_view['assunto_desc'].isin(sel_subj)]
-
-        if sel_cond:
-            df_view = df_view[df_view['condicao_desc'].isin(sel_cond)]
-
-        if txt_busca:
-            df_view = df_view[df_view['e'].astype(str).str.contains(txt_busca, case=False, na=False)]
-
-        # ==============================================================================
-
-        # Formatação Visual da Data (Pós-Filtro)
+        # Formatação Data
         if 'dt' in df_view.columns:
             df_view['dt'] = df_view['dt'].apply(formatters.formatar_data_notam)
 
-        # Definição das Colunas
         cols_show = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'dt']
         cols_validas = [c for c in cols_show if c in df_view.columns]
         
         st.caption(f"Exibindo {len(df_view)} registros")
 
-        # Tabela
         evento = st.dataframe(
             df_view[cols_validas],
             use_container_width=True, height=600,
@@ -190,7 +160,6 @@ if not df_total.empty:
             st.write("")
 
             st.markdown(f"**Assunto:**")
-            # Sua personalização: cor verde
             st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
             cond = dados.get('condicao_desc', 'N/A')
@@ -250,4 +219,4 @@ if not df_total.empty:
             st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    st.info("Banco vazio.")
+    st.info("Banco vazio. Clique em 'Atualizar Base Brasil' para baixar os dados.")
