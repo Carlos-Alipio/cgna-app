@@ -5,7 +5,7 @@ import xmltodict
 from sqlalchemy import text
 from datetime import datetime
 # Importando nosso dicionário de tradução
-from notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION
+from utils.notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION
 
 st.set_page_config(page_title="Extração Supabase", layout="wide")
 st.title("✈️ NOTAM AISWEB")
