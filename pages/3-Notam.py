@@ -6,7 +6,7 @@ from datetime import datetime, timezone # <--- Adicionado para pegar a hora UTC
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
-st.title("✈️ Painel de Notams")
+st.title("✈️ Monitoramento de NOTAM")
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
