@@ -2,64 +2,72 @@ import streamlit as st
 import pandas as pd
 import requests
 import xmltodict
-from sqlalchemy import text # Necessário para comandos SQL manuais
-from datetime import datetime # <--- Adicione este import se não tiver
-
-def formatar_data_notam(texto_bruto):
-    """
-    Recebe: '2511032105' (YYMMDDHHmm)
-    Retorna: '03/11/2025 21:05'
-    """
-    if not isinstance(texto_bruto, str):
-        return "-"
-    
-    texto = texto_bruto.strip() # Remove espaços extras
-    
-    # Se for "PERM" ou "EST", devolve o texto original sem mexer
-    if not texto.isdigit() or len(texto) != 10:
-        return texto 
-
-    try:
-        # 1. Transforma o texto em um Objeto de Data (entende que 25 é 2025)
-        # %y = Ano 2 digitos, %m = Mês, %d = Dia, %H = Hora, %M = Minuto
-        data_obj = datetime.strptime(texto, "%y%m%d%H%M")
-        
-        # 2. Formata para o padrão brasileiro
-        return data_obj.strftime("%d/%m/%Y %H:%M")
-    except ValueError:
-        return texto # Se der erro, devolve o original
-
-
+from sqlalchemy import text
+from datetime import datetime
+# Importando nosso dicionário de tradução
+from notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION
 
 st.set_page_config(page_title="Extração Supabase", layout="wide")
 st.title("✈️ NOTAM AISWEB")
 
-# --- 🔒 BLOCO DE SEGURANÇA (COLE ISSO NO TOPO DAS PÁGINAS) ---
+# --- 🔒 BLOCO DE SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
-    st.set_page_config(layout="centered") # Força layout pequeno
+    st.set_page_config(layout="centered") 
     st.error("⛔ **Acesso Negado!**")
     st.info("Você precisa fazer login para acessar o sistema de dados.")
-    st.stop() # <--- O COMANDO MÁGICO: Para de rodar o código aqui.
-# -------------------------------------------------------------
+    st.stop()
+# -----------------------------
 
-# ... Daqui para baixo fica o seu código normal (st.set_page_config, st.title, etc) ...
-
-# --- CONFIGURAÇÕES ---
-# Pegando a senha do cofre de segredos (secrets.toml)
-# O nome "supabase" aqui deve ser o mesmo que você colocou nos colchetes [connections.supabase]
+# --- CONEXÃO ---
 conn = st.connection("supabase", type="sql")
 
 API_KEY = "1279934730"
 API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
 BASE_URL = "http://aisweb.decea.mil.br/api/"
 
-# --- FUNÇÕES DO BANCO DE DADOS (AGORA COM POSTGRES) ---
+# --- FUNÇÕES AUXILIARES ---
+
+def formatar_data_notam(texto_bruto):
+    """
+    Recebe: '2511032105' (YYMMDDHHmm)
+    Retorna: '03/11/2025 21:05'
+    """
+    if not isinstance(texto_bruto, str): return "-"
+    texto = texto_bruto.strip()
+    if not texto.isdigit() or len(texto) != 10: return texto 
+    try:
+        data_obj = datetime.strptime(texto, "%y%m%d%H%M")
+        return data_obj.strftime("%d/%m/%Y %H:%M")
+    except ValueError: return texto
+
+def decodificar_q_code(q_string):
+    """
+    Traduz o código Q (ex: QMXLC ou MXLC) para texto legível.
+    Retorna: (Assunto Texto, Condição Texto, Código Assunto, Código Condição)
+    """
+    if not isinstance(q_string, str) or len(q_string) < 4:
+        return "Outros", "Ver Texto", "XX", "XX"
+    
+    try:
+        # Se começar com Q, pega os caracteres seguintes. Se não, pega do início.
+        # Ex: "QMXLC" -> code="MXLC" | "MXLC" -> code="MXLC"
+        code = q_string[1:5] if q_string.upper().startswith("Q") else q_string[:4]
+        
+        ass_cod = code[:2]
+        con_cod = code[2:4]
+        
+        ass_txt = NOTAM_SUBJECT.get(ass_cod, f"Outros ({ass_cod})")
+        con_txt = NOTAM_CONDITION.get(con_cod, f"Condição ({con_cod})")
+        
+        return ass_txt, con_txt, ass_cod, con_cod
+    except:
+        return "Erro Leitura", "Erro", "XX", "XX"
+
+# --- BANCO DE DADOS ---
+
 def salvar_no_banco(df):
     try:
         with conn.session as s:
-            # if_exists='replace' -> CRUCIAL AGORA: 
-            # Isso vai destruir a tabela antiga (com poucas colunas)
-            # e criar a nova automaticamente com TODAS as colunas do XML.
             df.to_sql('notams', conn.engine, if_exists='replace', index=False, chunksize=1000)
         return True
     except Exception as e:
@@ -67,16 +75,13 @@ def salvar_no_banco(df):
         return False
 
 def ler_do_banco():
-    # O st.connection tem cache automático (ttl). 
-    # ttl=0 garante que sempre pegue o dado fresco.
     try:
-        df = conn.query('SELECT * FROM notams', ttl=0)
-        return df
+        return conn.query('SELECT * FROM notams', ttl=0)
     except:
         return pd.DataFrame()
 
-# --- BUSCA NA API (Mesma lógica de antes) ---
-# --- FUNÇÃO DE EXTRAÇÃO (VERSÃO SALVA TUDO) ---
+# --- BUSCA NA API ---
+
 def buscar_notams(icao_code):
     headers = {'Content-Type': 'application/xml'}
     params = {'apiKey': API_KEY, 'apiPass': API_PASS, 'area': 'notam', 'icaocode': icao_code}
@@ -87,24 +92,34 @@ def buscar_notams(icao_code):
     if response.status_code == 200:
         dados_dict = xmltodict.parse(response.content)
         try:
-            # Caminho para achar os itens no XML
             if 'aisweb' in dados_dict and 'notam' in dados_dict['aisweb'] and 'item' in dados_dict['aisweb']['notam']:
                 lista_notams = dados_dict['aisweb']['notam']['item']
             else:
                 return None
 
-            # Garante que seja lista mesmo se tiver só 1 item
             if isinstance(lista_notams, dict): lista_notams = [lista_notams]
             
-            # 1. Cria o DataFrame com TODAS as colunas que vierem
             df = pd.DataFrame(lista_notams)
             
-            # 2. TRUQUE DE MESTRE: Converter tudo para String (Texto)
-            # O XML tem dados aninhados (dicionários dentro de dicionários).
-            # O PostgreSQL não aceita dicionário Python direto.
-            # Convertendo pra string, garantimos que nada quebra o salvamento.
-            df = df.astype(str)
+            # --- DETETIVE DE CÓDIGO Q (Procura coluna 'cod' primeiro) ---
+            possiveis_nomes = ['cod', 'code', 'q', 'qcode']
+            coluna_q = None
             
+            for nome in possiveis_nomes:
+                if nome in df.columns:
+                    coluna_q = nome
+                    break
+            
+            # Se achou a coluna, aplica a decodificação
+            if coluna_q:
+                df['assunto_desc'], df['condicao_desc'], df['assunto_cod'], df['condicao_cod'] = \
+                    zip(*df[coluna_q].apply(decodificar_q_code))
+            else:
+                df['assunto_desc'] = "N/A"
+                df['condicao_desc'] = "N/A"
+            # -------------------------------------------------------------
+            
+            df = df.astype(str)
             return df
             
         except Exception as e:
@@ -112,27 +127,31 @@ def buscar_notams(icao_code):
             return None
     return None
 
-# ... (Todo o código de cima, imports e funções, continua igual) ...
+# --- INTERFACE ---
 
-# --- INTERFACE MASTER-DETAIL ---
 st.divider()
 st.subheader("✈️ Gerenciador de Dados")
 
-# 1. Área de Controle (Busca)
+# 1. Área de Controle
 c1, c2 = st.columns([3, 1]) 
 with c1:
-    aeroporto = st.text_input("Código ICAO", value="")
+    aeroporto = st.text_input("Código ICAO", value="SBGR, SBSP, SBGL, SBRJ, SBBR, SBCF, SBRF, SBSV, SBFZ, SBPA, SBCT, SBFL, SBBE, SBEG, SBGO, SBCY, SBCG, SBSG, SBMO, SBSL, SBTE, SBJP, SBAR, SBPJ, SBPV, SBRB, SBBV, SBMQ, SBFI, SBNF, SBIL, SBPS, SBPL, SBKG, SBCX, SBCH, SBMG, SBLO, SBUL, SBMK, SBJV, SBVT, SBCA, SBSN, SBIZ, SBJU, SBRP, SBIP, SBQV, SAEZ, SABE")
 with c2:
     st.write("") 
     st.write("") 
-    if st.button("🔄 Buscar", type="primary", use_container_width=True):
-        df_novo = buscar_notams(aeroporto)
-        if df_novo is not None and not df_novo.empty:
-            salvar_no_banco(df_novo)
-            st.success("Atualizado!")
-            st.rerun()
+    if st.button("Buscar", type="primary", use_container_width=True):
+        if aeroporto:
+            df_novo = buscar_notams(aeroporto)
+            if df_novo is not None and not df_novo.empty:
+                salvar_no_banco(df_novo)
+                st.success("Atualizado!")
+                st.rerun()
+            else:
+                st.warning("Nenhum dado encontrado.")
+        else:
+            st.warning("Digite um ICAO.")
 
-# 2. Área Visual (Tabela + Painel Lateral)
+# 2. Área Visual
 df_banco = ler_do_banco()
 
 if not df_banco.empty:
@@ -141,33 +160,36 @@ if not df_banco.empty:
     col_tabela, col_detalhes = st.columns([0.65, 0.35], gap="large")
 
     with col_tabela:
-        # --- NOVIDADE: SELETOR DE COLUNAS ---
-        # 1. Definimos quais colunas queremos ver de início
-        # (Adapte esta lista se quiser outras como padrão)
-        colunas_sugeridas = ['loc', 'b', 'c', 'tp', 'n', 'cod']
-        
-        # Filtramos para garantir que essas colunas realmente existem no banco
-        # (Isso evita erro se o XML mudar um dia)
-        padrao = [c for c in colunas_sugeridas if c in df_banco.columns]
-        
-        # 2. O Multiselect
-        cols_visiveis = st.multiselect(
-            "👁️ Colunas visíveis:",
-            options=df_banco.columns,
-            default=padrao,
-            placeholder="Escolha as colunas..."
+        # --- FILTRO POR ASSUNTO (DECODIFICADO) ---
+        lista_assuntos = sorted(df_banco['assunto_desc'].unique())
+        filtro_assunto = st.multiselect(
+            "📂 Filtrar por Assunto:",
+            options=lista_assuntos,
+            placeholder="Ex: Pista, ILS, Obras..."
         )
         
-        # 3. Criamos uma "view" apenas com as colunas escolhidas
-        # Se o usuário tirar tudo, mostramos o padrão para não quebrar
-        df_exibicao = df_banco[cols_visiveis] if cols_visiveis else df_banco[padrao]
-        
-        # ------------------------------------
+        if filtro_assunto:
+            df_exibicao = df_banco[df_banco['assunto_desc'].isin(filtro_assunto)]
+        else:
+            df_exibicao = df_banco
 
+        # --- SELETOR DE COLUNAS ---
+        # Colunas padrão, incluindo as novas traduzidas
+        colunas_sugeridas = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'b', 'c']
+        padrao = [c for c in colunas_sugeridas if c in df_exibicao.columns]
+        
+        cols_visiveis = st.multiselect(
+            "👁️ Colunas visíveis:",
+            options=df_exibicao.columns,
+            default=padrao
+        )
+        
+        df_view = df_exibicao[cols_visiveis] if cols_visiveis else df_exibicao[padrao]
+        
         st.caption("Selecione uma linha para ver detalhes 👉")
         
         evento = st.dataframe(
-            df_exibicao,
+            df_view,
             use_container_width=True,
             height=600,
             on_select="rerun",
@@ -177,20 +199,12 @@ if not df_banco.empty:
 
     with col_detalhes:
         if len(evento.selection.rows) > 0:
-            # --- O PULO DO GATO ---
-            # 1. Pegamos qual linha visual foi clicada (ex: linha 0, 1, 2...)
+            # Lógica para pegar a linha certa mesmo com filtros
             posicao_visual = evento.selection.rows[0]
-            
-            # 2. Descobrimos qual é o ÍNDICE REAL dessa linha no dataframe exibido
             indice_real = df_exibicao.index[posicao_visual]
-            
-            # 3. Usamos o .loc (pelo índice) para buscar os dados no BANCO COMPLETO (df_banco)
-            # Assim, mesmo que a coluna 'e' (texto) esteja oculta na tabela,
-            # conseguimos pegar ela aqui para exibir nos detalhes!
             dados_linha = df_banco.loc[indice_real]
-            # ----------------------
 
-            # --- DESENHANDO O PAINEL DE DETALHES ---
+            # --- PAINEL DE DETALHES ---
             st.caption("📌 Detalhes do NOTAM")
             c_localidade, c_notam = st.columns(2)
 
@@ -205,17 +219,34 @@ if not df_banco.empty:
                 st.caption("Notam:")
                 st.markdown(f"#### {num_notam}")
             
-            st.markdown("---")
+            st.divider()
+
+            # --- BADGES DECODIFICADOS ---
+            subj = dados_linha.get('assunto_desc', 'N/A')
+            cond = dados_linha.get('condicao_desc', 'N/A')
             
+            st.info(f"Assunto: **{subj}**")
+            
+            # Cor condicional
+            if any(x in cond for x in ['Fechado', 'Inoperante', 'Proibido', 'Retirado']):
+                st.error(f"Condição: **{cond}**")
+            elif any(x in cond for x in ['Obras', 'Limitado', 'Requer']):
+                st.warning(f"Condição: **{cond}**")
+            else:
+                st.success(f"Condição: **{cond}**")
+
+            st.divider()
+            
+            # Datas
             raw_inicio = dados_linha.get('b', '')
             raw_fim = dados_linha.get('c', '')
             data_inicio = formatar_data_notam(raw_inicio)
             data_fim = formatar_data_notam(raw_fim)
 
             st.caption("📅 Vigência")
-            c_inicio, c_fim = st.columns(2)
+            c_ini, c_fim = st.columns(2)
             
-            with c_inicio:
+            with c_ini:
                 st.caption("Início (B)")
                 st.markdown(f"#### {data_inicio}") 
 
@@ -226,10 +257,9 @@ if not df_banco.empty:
                 else:
                     st.markdown(f"#### {data_fim}")
 
-            st.markdown("---")
-            st.caption("**📝 Texto do NOTAM:**")
+            st.divider()
+            st.caption("**📝 Texto do NOTAM (Item E):**")
             
-            # Pega o texto 'e' (mesmo que não esteja selecionado no multiselect acima)
             texto_notam = dados_linha.get('e', 'Sem texto')
             
             st.markdown(
@@ -248,7 +278,7 @@ if not df_banco.empty:
                 unsafe_allow_html=True
             )
 
-            st.markdown("---")
+            st.divider()
 
             with st.expander("Ver dados brutos (JSON)"):
                 st.json(dados_linha.to_dict())
@@ -257,4 +287,4 @@ if not df_banco.empty:
             st.warning("👈 Clique em uma linha na tabela para ver o painel de detalhes aqui.")
             
 else:
-    st.info("Banco vazio.")
+    st.info("Banco vazio. Busque um aeroporto acima.")
