@@ -148,7 +148,6 @@ if not df_total.empty:
             st.write("")
 
             st.markdown(f"**Assunto:**")
-            #st.markdown(f"##### {dados.get('assunto_desc', 'N/A')}")
             st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
             cond = dados.get('condicao_desc', 'N/A')
@@ -198,6 +197,8 @@ if not df_total.empty:
                 """,
                 unsafe_allow_html=True
             )
+
+            st.divider()
 
             with st.expander("🔍 Ver JSON Bruto"):
                 st.json(dados.to_dict())
