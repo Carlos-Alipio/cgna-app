@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-# Importando nossos novos módulos organizados
+# Importando nossos módulos organizados da pasta utils
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
@@ -18,11 +18,8 @@ st.divider()
 col_btn, col_info = st.columns([1, 3])
 with col_btn:
     if st.button("🔄 Atualizar Base Brasil", type="primary", use_container_width=True):
-        # A página não sabe como busca, só pede para a api_decea buscar
         df_novo = api_decea.buscar_firs_brasil()
-        
         if df_novo is not None:
-            # A página não sabe SQL, só pede para o db_manager salvar
             db_manager.salvar_notams(df_novo)
             st.success(f"Base atualizada! {len(df_novo)} NOTAMs.")
             st.rerun()
@@ -37,7 +34,7 @@ if not df_total.empty:
     if meus_aeroportos:
         df_filtrado = df_total[df_total['loc'].isin(meus_aeroportos)]
     else:
-        st.warning("⚠️ Lista de monitoramento vazia.")
+        st.warning("⚠️ Lista de monitoramento vazia. Vá em Configurações.")
         df_filtrado = df_total
 
     with col_info:
@@ -46,7 +43,7 @@ if not df_total.empty:
     st.divider()
 
     # Layout Master-Detail
-    col_tabela, col_detalhes = st.columns([0.65, 0.35], gap="large")
+    col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large") # Ajustei para 40% na direita para caber melhor
 
     with col_tabela:
         assuntos = sorted(df_filtrado['assunto_desc'].unique())
@@ -63,27 +60,99 @@ if not df_total.empty:
             on_select="rerun", selection_mode="single-row", hide_index=True
         )
 
+    # --- PAINEL DE DETALHES (LAYOUT NOVO) ---
     with col_detalhes:
         if len(evento.selection.rows) > 0:
             idx = evento.selection.rows[0]
             dados = df_view.iloc[idx]
 
-            st.info(f"📍 {dados.get('loc')} - NOTAM {dados.get('n')}")
-            
-            c1, c2 = st.columns(2)
-            c1.markdown(f"**Assunto:**\n{dados.get('assunto_desc')}")
-            
-            cond = dados.get('condicao_desc')
-            cor = "red" if any(x in cond for x in ['Fechado','Proibido']) else "green"
-            c2.markdown(f"**Condição:**\n:{cor}[{cond}]")
-            
+            st.markdown("### 📌 Detalhes do NOTAM")
             st.divider()
-            st.code(dados.get('e', ''), language="text")
+
+            # 1. Localidade (loc)
+            st.markdown(f"**Localidade (loc):**")
+            st.markdown(f"## 📍 {dados.get('loc', '-')}")
+
+            # 2. Tipo e 3. Número (Agrupados para economizar espaço visual, mas claros)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Tipo (tp):**")
+                st.info(f"{dados.get('tp', '-')}")
+            with c2:
+                st.markdown("**Número (n):**")
+                st.info(f"{dados.get('n', '-')}")
+
+            # 4. Referência (ref)
+            ref_val = dados.get('ref', '')
+            if ref_val and ref_val != 'nan' and ref_val != 'None':
+                st.markdown(f"**Referência (ref):** {ref_val}")
             
+            st.write("") # Espaço
+
+            # 5. Assunto
+            subj = dados.get('assunto_desc', 'N/A')
+            st.markdown(f"**Assunto:**")
+            st.markdown(f"##### {subj}")
+
+            # 6. Condição (Com cor)
+            cond = dados.get('condicao_desc', 'N/A')
+            cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
+            
+            st.markdown(f"**Condição:**")
+            st.markdown(f":{cor}[##### {cond}]")
+
+            st.divider()
+
+            # 7. Início e 8. Fim
+            data_b = formatters.formatar_data_notam(dados.get('b'))
+            data_c = formatters.formatar_data_notam(dados.get('c'))
+
             c_ini, c_fim = st.columns(2)
-            # Usa o formatters.formatar_data_notam
-            c_ini.metric("Início", formatters.formatar_data_notam(dados.get('b')))
-            c_fim.metric("Fim", formatters.formatar_data_notam(dados.get('c')))
+            with c_ini:
+                st.markdown("**Início (b):**")
+                st.write(f"📅 {data_b}")
+            with c_fim:
+                st.markdown("**Fim (c):**")
+                if "PERM" in str(data_c):
+                    st.write(f"📅 :red[{data_c}]")
+                else:
+                    st.write(f"📅 {data_c}")
+
+            # 9. Período (d) - Item D do NOTAM
+            # Verifica se existe e não é vazio
+            periodo = dados.get('d', '')
+            if periodo and periodo != 'nan' and periodo != 'None':
+                st.markdown("**Período (d):**")
+                st.warning(f"🕒 {periodo}")
+
+            st.divider()
+
+            # 10. Texto (e)
+            st.markdown("**Texto (e):**")
+            texto_e = dados.get('e', 'Sem texto')
+            
+            st.markdown(
+                f"""
+                <div style='
+                    background-color: rgba(128, 128, 128, 0.15);
+                    padding: 15px;
+                    border-radius: 8px;
+                    border-left: 5px solid #FF4B4B;
+                    font-family: "Source Code Pro", monospace;
+                    font-size: 14px;
+                    white-space: pre-wrap;
+                    line-height: 1.5;
+                '>{texto_e.strip()}</div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # JSON Técnico no final
+            with st.expander("🔍 Ver JSON Bruto"):
+                st.json(dados.to_dict())
+
+        else:
+            st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    st.info("Banco vazio.")
+    st.info("Banco vazio. Clique em 'Atualizar Base Brasil'.")
