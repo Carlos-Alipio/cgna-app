@@ -28,11 +28,11 @@ with st.container(border=True):
         m1, m2, m3 = st.columns(3)
         
         # Métrica 1: Base Total
-        m1.metric("📦 Base Total (Brasil)", len(df_total), help="Total bruto armazenado no banco.")
+        m1.metric("Base Total (Brasil)", len(df_total), help="Total bruto armazenado no banco.")
 
         # --- CONTROLE DE VISUALIZAÇÃO (Métrica 3 vira um Controle) ---
         with m3:
-            st.write("👀 **Modo de Visualização:**")
+            st.write("**Modo de Visualização:**")
             # O Toggle define se filtramos ou não
             filtrar_frota = st.toggle("🎯 Apenas Minha Frota", value=True, disabled=(not meus_aeroportos))
             
@@ -54,7 +54,7 @@ with st.container(border=True):
         # Métrica 2: O que está na tela agora
         percentual = (len(df_filtrado)/len(df_total)) if len(df_total) > 0 else 0
         m2.metric(
-            label="📊 Visualizando Agora", 
+            label="Visualizando Agora", 
             value=len(df_filtrado),
             delta=f"{percentual:.1%} da base",
             help=f"Modo atual: {label_modo}"
@@ -62,7 +62,7 @@ with st.container(border=True):
 
     with col_btn:
         st.write("") # Espaço para alinhar
-        if st.button("🔄 Atualizar Base (API)", type="primary", use_container_width=True):
+        if st.button("🔄 Atualizar", type="primary", use_container_width=True):
             df_novo = api_decea.buscar_firs_brasil()
             if df_novo is not None:
                 db_manager.salvar_notams(df_novo)
