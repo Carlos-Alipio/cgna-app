@@ -19,48 +19,58 @@ if 'novos_ids' not in st.session_state:
 st.divider()
 
 # ==============================================================================
-# 1. CARREGAR DADOS E CONFIGURAÇÕES (GLOBAL)
+# 1. CARREGAR DADOS E CONFIGURAÇÕES
 # ==============================================================================
-# Carregamos aqui para as variáveis existirem tanto no botão quanto no final do script
 df_total = db_manager.carregar_notams()
-meus_aeroportos = db_manager.carregar_frota_monitorada() # <--- AQUI A CORREÇÃO
+meus_aeroportos = db_manager.carregar_frota_monitorada()
 
 # ==============================================================================
-# 2. CONTROLE DE ATUALIZAÇÃO
+# 2. CONTROLE DE ATUALIZAÇÃO (FILTER-BEFORE-SAVE)
 # ==============================================================================
 col_btn, col_info = st.columns([1, 3])
 
 with col_btn:
-    if st.button("🔄 Atualizar Minha Frota", type="primary", use_container_width=True):
+    # Botão agora chama a função das FIRs
+    if st.button("🔄 Atualizar Base Brasil", type="primary", use_container_width=True):
         if not meus_aeroportos:
-            st.warning("⚠️ Sua lista de configurações está vazia! Adicione aeroportos em 'Configurações' primeiro.")
+            st.warning("⚠️ Adicione aeroportos em 'Configurações' antes de atualizar.")
         else:
             # 1. Snapshot dos IDs antigos
             ids_antigos = set(df_total['id'].astype(str).tolist()) if not df_total.empty and 'id' in df_total.columns else set()
 
-            # 2. Busca APENAS os aeroportos da lista
-            df_novo = api_decea.buscar_por_lista(meus_aeroportos)
+            # 2. Busca o BRASIL TODO (5 FIRs)
+            df_brasil = api_decea.buscar_firs_brasil()
             
-            if df_novo is not None and not df_novo.empty:
-                # 3. Salva no banco
-                db_manager.salvar_notams(df_novo)
+            if df_brasil is not None and not df_brasil.empty:
                 
-                # 4. Calcula diferença
-                if 'id' in df_novo.columns:
-                    ids_atuais = set(df_novo['id'].astype(str).tolist())
-                    diferenca = ids_atuais - ids_antigos
-                    st.session_state['novos_ids'] = list(diferenca)
-                    qtd_novos = len(diferenca)
+                # --- FILTRO CRÍTICO ---
+                # Só mantemos o que está na nossa lista de interesse
+                df_salvar = df_brasil[df_brasil['loc'].isin(meus_aeroportos)].copy()
+                # ----------------------
+
+                if not df_salvar.empty:
+                    # 3. Salva apenas o filtrado no banco
+                    db_manager.salvar_notams(df_salvar)
+                    
+                    # 4. Calcula diferença (Highlight)
+                    if 'id' in df_salvar.columns:
+                        ids_atuais = set(df_salvar['id'].astype(str).tolist())
+                        diferenca = ids_atuais - ids_antigos
+                        st.session_state['novos_ids'] = list(diferenca)
+                        qtd_novos = len(diferenca)
+                    else:
+                        qtd_novos = 0
+                    
+                    msg_extra = f"🎉 {qtd_novos} novos!" if qtd_novos > 0 else ""
+                    st.success(f"Filtro aplicado! De {len(df_brasil)} baixados, salvamos {len(df_salvar)} da sua frota. {msg_extra}")
+                    st.rerun()
                 else:
-                    qtd_novos = 0
-                
-                msg_extra = f"🎉 {qtd_novos} novos!" if qtd_novos > 0 else "Sem alterações."
-                st.success(f"Sucesso! {len(df_novo)} NOTAMs baixados. {msg_extra}")
-                st.rerun()
-            elif df_novo is not None and df_novo.empty:
-                st.warning("A busca retornou vazia (nenhum NOTAM vigente).")
+                    st.warning(f"Baixamos {len(df_brasil)} NOTAMs do Brasil, mas nenhum deles é dos aeroportos da sua lista.")
+            
+            elif df_brasil is not None:
+                st.warning("A API do DECEA não retornou dados.")
             else:
-                st.error("Falha na atualização.")
+                st.error("Falha na conexão com o DECEA.")
 
 # ==============================================================================
 # 3. EXIBIÇÃO DOS DADOS
@@ -68,7 +78,7 @@ with col_btn:
 
 if not df_total.empty:
     
-    # O banco já contém apenas a frota, então df_total é o nosso df_filtrado
+    # O banco já está filtrado, então mostramos tudo que tem nele
     df_filtrado = df_total.copy()
 
     with col_info:
@@ -130,7 +140,7 @@ if not df_total.empty:
         
         st.caption(f"Exibindo {len(df_view)} registros")
 
-        # Função de Estilo (Highlight)
+        # Função de Estilo
         def realcar_novos(row):
             cor = ''
             if 'id' in row.index:
@@ -139,7 +149,7 @@ if not df_total.empty:
                     cor = 'background-color: #d1e7dd; color: #0f5132; font-weight: bold'
             return [cor] * len(row)
 
-        # Prepara dados para exibição (garante ID para o styler)
+        # Prepara dados para exibição
         cols_final = list(cols_validas)
         if 'id' not in cols_final:
             cols_final.append('id')
@@ -162,7 +172,6 @@ if not df_total.empty:
     with col_detalhes:
         if len(evento.selection.rows) > 0:
             idx = evento.selection.rows[0]
-            # Usa o df_view filtrado
             dados = df_view.iloc[idx]
 
             st.markdown("### 📌 Detalhes do NOTAM")
@@ -249,9 +258,8 @@ if not df_total.empty:
             st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    # Se o banco estiver vazio, verifica a lista para dar a dica certa
     if not meus_aeroportos:
         st.warning("⚠️ Você não tem aeroportos configurados.")
-        st.info("Vá no menu 'Configurações' e adicione os códigos ICAO (ex: SBGR, SBRJ) que deseja monitorar.")
+        st.info("Vá no menu 'Configurações' e adicione os códigos ICAO.")
     else:
-        st.info("Banco de dados vazio. Clique em 'Atualizar Minha Frota' para baixar os dados.")
+        st.info("Banco de dados vazio. Clique em 'Atualizar Base Brasil'.")

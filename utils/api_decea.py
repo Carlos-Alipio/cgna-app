@@ -2,37 +2,32 @@ import requests
 import xmltodict
 import pandas as pd
 import streamlit as st
-# Importa o formatters para já salvar o dado limpo/decodificado
 from utils.formatters import decodificar_q_code
 
 API_KEY = "1279934730"
 API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
 BASE_URL = "http://aisweb.decea.mil.br/api/"
 
-def buscar_por_lista(lista_icaos):
+def buscar_firs_brasil():
     """
-    Recebe uma lista ['SBGR', 'SBSP'] e busca apenas eles na API.
-    Isso torna o download MUITO mais rápido.
+    Busca as 5 FIRs do Brasil.
+    Isso traz TODOS os NOTAMs do espaço aéreo brasileiro.
     """
-    if not lista_icaos:
-        return None
-
-    # Transforma a lista em string separada por vírgula (ex: "SBGR,SBSP,SBRJ")
-    # O .join garante que não haja espaços extras
-    icaos_string = ",".join([str(x).strip().upper() for x in lista_icaos])
+    # FIRs: Amazônica, Brasília, Curitiba, Recife, Atlântico
+    firs = "SBAZ,SBBS,SBCW,SBRE,SBQV"
     
     headers = {'Content-Type': 'application/xml'}
     params = {
         'apiKey': API_KEY, 
         'apiPass': API_PASS, 
         'area': 'notam', 
-        'icaocode': icaos_string
+        'icaocode': firs
     }
     
-    with st.spinner(f"📡 Baixando dados de {len(lista_icaos)} aeroportos da sua lista..."):
+    with st.spinner(f"📡 Baixando dados completos do espaço aéreo brasileiro (5 FIRs)..."):
         try:
-            # timeout=30 evita que o sistema fique travado eternamente se a API cair
-            response = requests.get(BASE_URL, params=params, timeout=30)
+            # Aumentei o timeout para 60s pois o arquivo é grande
+            response = requests.get(BASE_URL, params=params, timeout=60)
             
             if response.status_code == 200:
                 return processar_xml(response.content)
@@ -46,17 +41,14 @@ def buscar_por_lista(lista_icaos):
 def processar_xml(content):
     dados_dict = xmltodict.parse(content)
     try:
-        # Navegação segura no XML para achar a lista de itens
         if 'aisweb' in dados_dict and 'notam' in dados_dict['aisweb'] and 'item' in dados_dict['aisweb']['notam']:
             lista = dados_dict['aisweb']['notam']['item']
             
-            # Se vier só 1 notam, transforma em lista para não dar erro no Pandas
             if isinstance(lista, dict): lista = [lista]
             
             df = pd.DataFrame(lista)
             
-            # --- PROCESSAMENTO (DECODIFICAÇÃO) ---
-            # Já aplicamos a tradução aqui para salvar no banco pronto
+            # Decodificação do Código Q
             col_q = next((c for c in ['cod', 'code', 'q'] if c in df.columns), None)
             
             if col_q:
@@ -68,7 +60,7 @@ def processar_xml(content):
             
             return df.astype(str)
             
-        return pd.DataFrame() # Retorna vazio se não tiver NOTAMs (ex: aeroporto sem avisos)
+        return pd.DataFrame()
         
     except Exception as e:
         st.error(f"Erro ao ler XML: {e}")
