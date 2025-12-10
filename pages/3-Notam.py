@@ -43,7 +43,6 @@ with st.container(border=True):
     with c_status:
         qtd_frota = len(meus_aeroportos)
         if qtd_frota > 0:
-            #st.markdown(f"**Estratégia de Filtro Ativa:**")
             st.caption(f"📡 Baixando dados da AISWEB - **{qtd_frota} Aeroportos** configurados.")
         else:
             st.error("⚠️ **Alerta:** Nenhuma Aeroporto configurado. O banco ficará vazio.")
@@ -54,13 +53,15 @@ with st.container(border=True):
         if not df_total.empty:
             # Pega a data do registro mais recente
             ultimo_dt = df_total['dt'].max() if 'dt' in df_total.columns else "-"
-            # Formata apenas a data (sem hora) para o delta
-            data_fmt = formatters.formatar_data_notam(ultimo_dt).split(' ')[0] 
+            
+            # --- MUDANÇA AQUI: Removemos o .split(' ')[0] para mostrar a hora completa ---
+            data_fmt = formatters.formatar_data_notam(ultimo_dt)
+            # -----------------------------------------------------------------------------
             
             st.metric(
                 label="NOTAMs Armazenados", 
                 value=len(df_total),
-                delta=f"Dados de {data_fmt}",
+                delta=f"Atualizado: {data_fmt}", # Agora mostra Data e Hora
                 delta_color="off"
             )
         else:
@@ -305,4 +306,4 @@ if not df_total.empty:
             st.info("👈 Selecione um NOTAM na tabela para ver os detalhes.")
 
 else:
-    st.info("Banco vazio. Clique em 'Sincronizar Base' para baixar os dados.")
+    st.info("Banco vazio. Clique em 'Sincronizar Aeroportos' para baixar os dados.")
