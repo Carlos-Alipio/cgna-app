@@ -135,7 +135,7 @@ st.subheader("✈️ Gerenciador de Dados")
 # 1. Área de Controle
 c1, c2 = st.columns([3, 1]) 
 with c1:
-    aeroporto = st.text_input("Código ICAO", value="SBGR, SBSP, SBGL, SBRJ, SBBR, SBCF, SBRF, SBSV, SBFZ, SBPA, SBCT, SBFL, SBBE, SBEG, SBGO, SBCY, SBCG, SBSG, SBMO, SBSL, SBTE, SBJP, SBAR, SBPJ, SBPV, SBRB, SBBV, SBMQ, SBFI, SBNF, SBIL, SBPS, SBPL, SBKG, SBCX, SBCH, SBMG, SBLO, SBUL, SBMK, SBJV, SBVT, SBCA, SBSN, SBIZ, SBJU, SBRP, SBIP, SBQV, SAEZ, SABE")
+    aeroporto = st.text_input("Código ICAO", value=".")
 with c2:
     st.write("") 
     st.write("") 
