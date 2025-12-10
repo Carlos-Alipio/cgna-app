@@ -35,7 +35,7 @@ with st.container(border=True):
 
     # --- COLUNA 1: AÇÃO ---
     with c_action:
-        if st.button("🔄 Sincronizar Aeroportos", type="primary", use_container_width=True, help="Baixa todas as FIRs e aplica o filtro da sua frota."):
+        if st.button("🔄 Sincronizar", type="primary", use_container_width=True, help="Baixa todas as FIRs e aplica o filtro da sua frota."):
             processar_atualizacao = True
         else:
             processar_atualizacao = False
