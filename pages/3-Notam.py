@@ -38,7 +38,7 @@ if not df_total.empty:
         df_filtrado = df_total.copy()
 
     with col_info:
-        st.metric("NOTAMs da Frota", len(df_filtrado), delta=f"Total Brasil: {len(df_total)}")
+        st.metric("NOTAMs do Filtro", len(df_filtrado), delta=f"Total AISWEB: {len(df_total)}")
 
     st.divider()
 
