@@ -44,3 +44,40 @@ def carregar_frota_monitorada():
         return df['icao'].tolist() if not df.empty else []
     except:
         return []
+    
+# ... (código existente) ...
+
+# --- NOVAS FUNÇÕES PARA FILTROS CRÍTICOS ---
+
+def carregar_filtros_configurados():
+    """Retorna um DataFrame com todos os filtros salvos"""
+    conn = get_connection()
+    try:
+        return conn.query("SELECT * FROM config_filtros", ttl=0)
+    except:
+        return pd.DataFrame(columns=['tipo', 'valor'])
+
+def atualizar_filtros_lote(tipo, lista_valores):
+    """
+    Apaga os filtros antigos desse tipo e insere os novos.
+    tipo: 'assunto' ou 'condicao'
+    lista_valores: lista de strings selecionadas
+    """
+    conn = get_connection()
+    try:
+        with conn.session as s:
+            # 1. Limpa os filtros anteriores desse tipo
+            s.execute(text("DELETE FROM config_filtros WHERE tipo = :t"), params={"t": tipo})
+            
+            # 2. Insere os novos (se houver)
+            if lista_valores:
+                dados = [{"t": tipo, "v": v} for v in lista_valores]
+                s.execute(
+                    text("INSERT INTO config_filtros (tipo, valor) VALUES (:t, :v)"),
+                    dados
+                )
+            s.commit()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar filtros: {e}")
+        return False
