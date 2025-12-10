@@ -51,10 +51,11 @@ if not df_total.empty:
             df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
         # ==============================================================================
-        # 🕵️‍♂️ ÁREA DE FILTROS AVANÇADOS
+        # 🕵️‍♂️ ÁREA DE FILTROS AVANÇADOS (LAYOUT OTIMIZADO)
         # ==============================================================================
         with st.expander("🔎 Filtros Avançados", expanded=True):
-            f1, f2 = st.columns(2)
+            # Linha 1: Localidade, Número e Assunto (3 colunas)
+            f1, f2, f3 = st.columns(3)
             
             # 1. Localidade (Multiselect)
             locs_disponiveis = sorted(df_filtrado['loc'].unique())
@@ -63,17 +64,16 @@ if not df_total.empty:
             # 2. Número (Texto)
             txt_num = f2.text_input("🔢 Número (n)", placeholder="Ex: 1234")
 
-            f3, f4 = st.columns(2)
-            
             # 3. Assunto (Multiselect)
             assuntos_disp = sorted(df_filtrado['assunto_desc'].unique())
             sel_subj = f3.multiselect("📂 Assunto", assuntos_disp)
 
+            # Linha 2: Condição e Texto (2 colunas)
+            f4, f5 = st.columns(2)
+
             # 4. Condição (CONDICIONAL ao Assunto)
-            # Se houver assunto selecionado, mostra apenas as condições daquele assunto.
-            # Se não, mostra todas as condições disponíveis.
+            # Lógica: Se escolheu Assunto, mostra só as condições daquele assunto
             if sel_subj:
-                # Filtra o dataframe temporariamente só para pegar as condições válidas
                 conds_validas = df_filtrado[df_filtrado['assunto_desc'].isin(sel_subj)]['condicao_desc'].unique()
             else:
                 conds_validas = df_filtrado['condicao_desc'].unique()
@@ -81,7 +81,7 @@ if not df_total.empty:
             sel_cond = f4.multiselect("🔧 Condição", sorted(conds_validas))
 
             # 5. Texto (Texto)
-            txt_busca = st.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
+            txt_busca = f5.text_input("📝 Procurar no Texto (e)", placeholder="Digite palavra chave...")
 
         # --- APLICAÇÃO DOS FILTROS (Lógica em Cascata) ---
         df_view = df_filtrado.copy()
@@ -148,6 +148,7 @@ if not df_total.empty:
             st.write("")
 
             st.markdown(f"**Assunto:**")
+            # Sua personalização: cor verde
             st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
             cond = dados.get('condicao_desc', 'N/A')
