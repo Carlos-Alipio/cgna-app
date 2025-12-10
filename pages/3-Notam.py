@@ -34,7 +34,7 @@ with st.container(border=True):
         with m3:
             st.write("**Modo de Visualização:**")
             # O Toggle define se filtramos ou não
-            filtrar_frota = st.toggle("🎯 Apenas Bases gol", value=True, disabled=(not meus_aeroportos))
+            filtrar_frota = st.toggle("🎯 Apenas Bases GOL", value=True, disabled=(not meus_aeroportos))
             
             if not meus_aeroportos:
                 st.caption("⚠️ Lista de frota vazia.")
