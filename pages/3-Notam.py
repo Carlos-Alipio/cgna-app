@@ -42,45 +42,49 @@ if not df_total.empty:
 
     st.divider()
 
-# Layout Master-Detail
+    # Layout Master-Detail
     col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large")
 
     with col_tabela:
-        # 1. ORDENAÇÃO (Novo)
-        # Ordena pela coluna 'dt' (data do notam) do mais novo para o mais antigo
-        # Convertemos para string para garantir, caso venha misturado
-        if 'dt' in df_filtrado.columns:
-            df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
+            # 1. ORDENAÇÃO (Feita no dado bruto para garantir ordem cronológica correta)
+            if 'dt' in df_filtrado.columns:
+                df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
-        # 2. FILTROS
-        assuntos = sorted(df_filtrado['assunto_desc'].unique())
-        filtro = st.multiselect("Filtrar Assunto:", assuntos)
-        
-        # Aplica filtro visual se houver
-        df_view = df_filtrado[df_filtrado['assunto_desc'].isin(filtro)] if filtro else df_filtrado
-        
-        # 3. COLUNAS (Modificado: Sai b/c, entra dt)
-        cols_show = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'dt']
-        
-        # Garante que as colunas existem antes de mostrar
-        cols_validas = [c for c in cols_show if c in df_view.columns]
-        
-        # Seletor de colunas (para o usuário poder trazer 'b' e 'c' de volta se quiser)
-        cols_visiveis = st.multiselect(
-            "👁️ Colunas visíveis:",
-            options=df_view.columns,
-            default=cols_validas
-        )
-        
-        # Mostra a tabela
-        evento = st.dataframe(
-            df_view[cols_visiveis],
-            use_container_width=True, 
-            height=600,
-            on_select="rerun", 
-            selection_mode="single-row",
-            hide_index=True
-        )
+            # 2. FILTROS
+            assuntos = sorted(df_filtrado['assunto_desc'].unique())
+            filtro = st.multiselect("Filtrar Assunto:", assuntos)
+            
+            # Cria a view baseada no filtro
+            if filtro:
+                df_view = df_filtrado[df_filtrado['assunto_desc'].isin(filtro)].copy()
+            else:
+                df_view = df_filtrado.copy()
+            
+            # --- NOVO: FORMATAÇÃO DA DATA 'DT' ---
+            # Aplicamos a função formatadora na coluna dt apenas para exibição
+            if 'dt' in df_view.columns:
+                df_view['dt'] = df_view['dt'].apply(formatters.formatar_data_notam)
+            # -------------------------------------
+
+            # 3. COLUNAS
+            cols_show = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'dt']
+            cols_validas = [c for c in cols_show if c in df_view.columns]
+            
+            cols_visiveis = st.multiselect(
+                "👁️ Colunas visíveis:",
+                options=df_view.columns,
+                default=cols_validas
+            )
+            
+            # Mostra a tabela
+            evento = st.dataframe(
+                df_view[cols_visiveis],
+                use_container_width=True, 
+                height=600,
+                on_select="rerun", 
+                selection_mode="single-row",
+                hide_index=True
+            )
 
     # --- PAINEL DE DETALHES (LAYOUT NOVO) ---
     with col_detalhes:
