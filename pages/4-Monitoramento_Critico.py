@@ -65,16 +65,24 @@ if not df_notams.empty:
         if 'dt' in df_critico.columns:
             df_critico = df_critico.sort_values(by='dt', ascending=False)
             
-        # Formatação para visualização
+        # Formatação para visualização (Datas)
         df_critico['Início'] = df_critico['b'].apply(formatters.formatar_data_notam)
         df_critico['Fim'] = df_critico['c'].apply(formatters.formatar_data_notam)
 
-        # --- MUDANÇA AQUI: Adicionado 'd' na lista de colunas ---
+        # Definição das colunas
         cols_view = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'Início', 'Fim', 'd', 'e']
-        # --------------------------------------------------------
         
+        # --- LIMPEZA DE "NONE" / "NAN" (NOVO) ---
+        # Substitui valores nulos reais por vazio
+        df_exibicao = df_critico[cols_view].fillna("")
+        
+        # Substitui textos "nan" ou "None" que o Pandas às vezes gera ao converter para string
+        for col in df_exibicao.columns:
+            df_exibicao[col] = df_exibicao[col].astype(str).replace({'nan': '', 'None': '', 'NaT': ''})
+        # ----------------------------------------
+
         st.dataframe(
-            df_critico[cols_view],
+            df_exibicao,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -82,12 +90,12 @@ if not df_notams.empty:
                 "n": "NOTAM",
                 "assunto_desc": "Assunto",
                 "condicao_desc": "Condição",
-                "d": "Período/Horário", # Nome amigável para a coluna 'd'
+                "d": "Período/Horário",
                 "e": "Texto Completo"
             }
         )
         
-        csv = df_critico[cols_view].to_csv(index=False).encode('utf-8')
+        csv = df_exibicao.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Baixar Relatório (CSV)",
             data=csv,
