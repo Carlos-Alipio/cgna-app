@@ -148,7 +148,8 @@ if not df_total.empty:
             st.write("")
 
             st.markdown(f"**Assunto:**")
-            st.markdown(f"##### {dados.get('assunto_desc', 'N/A')}")
+            #st.markdown(f"##### {dados.get('assunto_desc', 'N/A')}")
+            st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
             cond = dados.get('condicao_desc', 'N/A')
             cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
