@@ -3,6 +3,33 @@ import pandas as pd
 import requests
 import xmltodict
 from sqlalchemy import text # Necessário para comandos SQL manuais
+from datetime import datetime # <--- Adicione este import se não tiver
+
+def formatar_data_notam(texto_bruto):
+    """
+    Recebe: '2511032105' (YYMMDDHHmm)
+    Retorna: '03/11/2025 21:05'
+    """
+    if not isinstance(texto_bruto, str):
+        return "-"
+    
+    texto = texto_bruto.strip() # Remove espaços extras
+    
+    # Se for "PERM" ou "EST", devolve o texto original sem mexer
+    if not texto.isdigit() or len(texto) != 10:
+        return texto 
+
+    try:
+        # 1. Transforma o texto em um Objeto de Data (entende que 25 é 2025)
+        # %y = Ano 2 digitos, %m = Mês, %d = Dia, %H = Hora, %M = Minuto
+        data_obj = datetime.strptime(texto, "%y%m%d%H%M")
+        
+        # 2. Formata para o padrão brasileiro
+        return data_obj.strftime("%d/%m/%Y %H:%M")
+    except ValueError:
+        return texto # Se der erro, devolve o original
+
+
 
 st.set_page_config(page_title="Extração Supabase", layout="wide")
 st.title("✈️ NOTAM AISWEB")
@@ -85,37 +112,134 @@ def buscar_notams(icao_code):
             return None
     return None
 
-# --- INTERFACE (LAYOUT 1 COLUNA) ---
-st.divider() # Linha divisória visual
+# ... (Todo o código de cima, imports e funções, continua igual) ...
 
-# 1. Área de Controle (Input e Botões)
+# --- INTERFACE MASTER-DETAIL ---
+st.divider()
 st.subheader("✈️ Gerenciador de Dados")
 
-# Usamos colunas APENAS para os botões ficarem alinhados lado a lado, não a página toda
+# 1. Área de Controle (Busca)
 c1, c2 = st.columns([3, 1]) 
-
 with c1:
-    aeroporto = st.text_input("Código ICAO (Aeroporto)", value="", help="Ex: SBGR, SBSP, SBRJ")
-
+    aeroporto = st.text_input("Código ICAO", value="")
 with c2:
-    st.write("") # Espaço vazio para alinhar o botão verticalmente com a caixa de texto
     st.write("") 
-    if st.button("Atualizar", type="primary", use_container_width=True):
+    st.write("") 
+    if st.button("🔄 Buscar", type="primary", use_container_width=True):
         df_novo = buscar_notams(aeroporto)
         if df_novo is not None and not df_novo.empty:
             salvar_no_banco(df_novo)
-            st.success("Banco atualizado!")
-            st.rerun() # Recarrega a página para mostrar os dados novos
-        else:
-            st.warning("Nenhum dado encontrado.")
+            st.success("Atualizado!")
+            st.rerun()
 
-# 2. Visualização dos Dados (Ocupa a largura total agora)
+# 2. Área Visual (Tabela + Painel Lateral)
 df_banco = ler_do_banco()
 
 if not df_banco.empty:
-    st.markdown(f"### 📋 Base de Dados Completa ({len(df_banco)} registros)")
-    
-    # use_container_width=True garante que estique até a borda
-    st.dataframe(df_banco, use_container_width=True, height=600) 
+    st.markdown(f"### 📋 Registros ({len(df_banco)})")
+
+    # CRIAÇÃO DAS COLUNAS (O SEGREDO ESTÁ AQUI)
+    # col_tabela = Onde fica a lista (fica maior)
+    # col_detalhes = O painel da direita (fica menor)
+    col_tabela, col_detalhes = st.columns([0.65, 0.35], gap="large")
+
+    with col_tabela:
+        st.caption("Selecione uma linha para ver detalhes 👉")
+        
+        # EVENTO DE SELEÇÃO
+        # on_select="rerun" -> Faz o app recarregar assim que você clica
+        # selection_mode="single-row" -> Só deixa clicar em um por vez
+        evento = st.dataframe(
+            df_banco,
+            use_container_width=True,
+            height=600,
+            on_select="rerun",
+            selection_mode="single-row",
+            hide_index=True
+        )
+
+    with col_detalhes:
+        # Verifica se alguém clicou em alguma linha
+        if len(evento.selection.rows) > 0:
+            # Pega o número da linha clicada (índice)
+            indice_clicado = evento.selection.rows[0]
+            
+            # Pega os dados daquela linha específica no DataFrame
+            dados_linha = df_banco.iloc[indice_clicado]
+
+            # --- DESENHANDO O PAINEL DE DETALHES ---
+            st.caption("📌 Detalhes do NOTAM")
+            c_localidade, c_notam = st.columns(2)
+
+            # Tenta pegar o ID ou Número (trata erro caso a coluna mude de nome)
+            id_notam = dados_linha.get('loc', 'S/N')
+            num_notam = dados_linha.get('n', 'S/N')
+            
+            with c_localidade:
+                st.caption("Localidade:")
+                st.markdown(f"#### {id_notam}")
+
+            with c_notam:
+                st.caption("Notam:")
+                st.markdown(f"#### {num_notam}")
+            
+            st.markdown("---")
+            
+            # Pegamos os campos crus (Item B e Item C do NOTAM)
+            raw_inicio = dados_linha.get('b', '')
+            raw_fim = dados_linha.get('c', '')
+
+            # Aplicamos a formatação
+            data_inicio = formatar_data_notam(raw_inicio)
+            data_fim = formatar_data_notam(raw_fim)
+
+            st.caption("📅 Vigência")
+            c_inicio, c_fim = st.columns(2)
+            
+            with c_inicio:
+                st.caption("Início (B)")  # O título cinza pequeno
+                st.markdown(f"#### {data_inicio}") # Texto em destaque médio
+
+            with c_fim:
+                st.caption("Fim (C)")
+                # Se for PERM, pinta de vermelho usando sintaxe de cor do Streamlit
+                if "PERM" in data_fim:
+                    st.markdown(f"#### :red[{data_fim}]") 
+                else:
+                    st.markdown(f"#### {data_fim}")
+
+            st.markdown("---")
+            #st.write("**📝 Texto do NOTAM:**")
+            st.caption("**📝 Texto do NOTAM:**")
+            
+            # Caixa de texto cinza para destacar a mensagem
+            texto_notam = dados_linha.get('e', 'Sem texto')
+            #st.code(texto_notam, language="text")
+            st.markdown(
+                f"""
+                <div style='
+                    background-color: rgba(128, 128, 128, 0.1);
+                    padding: 15px;
+                    border-radius: 8px;
+                    border: 1px solid rgba(128, 128, 128, 0.2);
+                    font-family: "Source Code Pro", monospace;
+                    font-size: 14px;
+                    white-space: pre-wrap;
+                    line-height: 1.5;
+                '>{texto_notam.strip()}</div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            st.markdown("---")
+
+            # Mostra todos os outros dados brutos num expander (para curiosidade)
+            with st.expander("Ver dados brutos (JSON)"):
+                st.json(dados_linha.to_dict())
+                
+        else:
+            # Mensagem quando nada está selecionado
+            st.warning("👈 Clique em uma linha na tabela para ver o painel de detalhes aqui.")
+            
 else:
-    st.info("O banco de dados está vazio. Busque um aeroporto acima.")
+    st.info("Banco vazio.")
