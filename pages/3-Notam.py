@@ -34,7 +34,7 @@ with st.container(border=True):
 
     # --- COLUNA 1: AÇÃO ---
     with c_action:
-        if st.button("🔄 Sincronizar Base", type="primary", use_container_width=True, help="Baixa todas as FIRs e aplica o filtro da sua frota."):
+        if st.button("🔄 Sincronizar Aeroportos", type="primary", use_container_width=True, help="Baixa todas as FIRs e aplica o filtro da sua frota."):
             processar_atualizacao = True
         else:
             processar_atualizacao = False
@@ -43,10 +43,10 @@ with st.container(border=True):
     with c_status:
         qtd_frota = len(meus_aeroportos)
         if qtd_frota > 0:
-            st.markdown(f"**Estratégia de Filtro Ativa:**")
-            st.caption(f"📡 Baixando **Brasil Completo (5 FIRs)** ➔ Filtrando para **{qtd_frota} Aeroportos** configurados.")
+            #st.markdown(f"**Estratégia de Filtro Ativa:**")
+            st.caption(f"📡 Baixando dados da AISWEB - **{qtd_frota} Aeroportos** configurados.")
         else:
-            st.error("⚠️ **Alerta:** Nenhuma frota configurada. O banco ficará vazio.")
+            st.error("⚠️ **Alerta:** Nenhuma Aeroporto configurado. O banco ficará vazio.")
             st.caption("Vá em 'Configurações' para adicionar aeroportos.")
 
     # --- COLUNA 3: MÉTRICAS ATUAIS ---
@@ -69,7 +69,7 @@ with st.container(border=True):
     # --- LÓGICA DE ATUALIZAÇÃO (FILTER-BEFORE-SAVE) ---
     if processar_atualizacao:
         if not meus_aeroportos:
-            st.toast("⚠️ Configure sua frota antes de atualizar!", icon="🚫")
+            st.toast("⚠️ Configure seus Aeroportos antes de atualizar!", icon="🚫")
         else:
             # 1. Snapshot dos IDs antigos (para saber o que é novo)
             ids_antigos = set(df_total['id'].astype(str).tolist()) if not df_total.empty and 'id' in df_total.columns else set()
