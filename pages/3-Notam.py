@@ -5,7 +5,7 @@ import pandas as pd
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
-st.title("✈️ Painel de Operações (Modular)")
+st.title("✈️ Painel de Operações")
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:

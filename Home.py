@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 # Configuração da Página
 st.set_page_config(
-    page_title="Sistema Seguro", 
+    page_title="CGNA - GOL", 
     page_icon="🔒", 
     layout="centered", 
     initial_sidebar_state="collapsed"
@@ -65,7 +65,7 @@ if 'logado' not in st.session_state:
 if not st.session_state['logado']:
     st.markdown("""<style>[data-testid="stSidebar"] {display: none;}</style>""", unsafe_allow_html=True)
     
-    st.title("🔒 Sistema Corporativo")
+    st.title("🔒 Login CGNA")
     
     tab1, tab2 = st.tabs(["Login", "Criar Conta"])
     
