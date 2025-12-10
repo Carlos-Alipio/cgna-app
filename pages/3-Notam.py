@@ -5,7 +5,7 @@ import pandas as pd
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
-st.title("✈️ Painel de Operações (Smart Filter)")
+st.title("✈️ Painel de Notams")
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
@@ -17,7 +17,7 @@ st.divider()
 # 1. CONTROLE DE ATUALIZAÇÃO
 col_btn, col_info = st.columns([1, 3])
 with col_btn:
-    if st.button("🔄 Atualizar Base Brasil", type="primary", use_container_width=True):
+    if st.button("🔄 Atualizar", type="primary", use_container_width=True):
         df_novo = api_decea.buscar_firs_brasil()
         if df_novo is not None:
             db_manager.salvar_notams(df_novo)

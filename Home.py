@@ -6,7 +6,7 @@ from sqlalchemy import text
 # Configuração da Página
 st.set_page_config(
     page_title="CGNA - GOL", 
-    page_icon="🔒", 
+    page_icon="✈️", 
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
