@@ -121,7 +121,7 @@ if not df_total.empty:
             cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
             
             st.markdown(f"**Condição:**")
-            st.markdown(f":{cor}[##### {cond}]")
+            st.markdown(f":{cor}##### {cond}]")
 
             st.divider()
 
