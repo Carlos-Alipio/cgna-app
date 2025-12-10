@@ -42,22 +42,44 @@ if not df_total.empty:
 
     st.divider()
 
-    # Layout Master-Detail
-    col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large") # Ajustei para 40% na direita para caber melhor
+# Layout Master-Detail
+    col_tabela, col_detalhes = st.columns([0.60, 0.40], gap="large")
 
     with col_tabela:
+        # 1. ORDENAÇÃO (Novo)
+        # Ordena pela coluna 'dt' (data do notam) do mais novo para o mais antigo
+        # Convertemos para string para garantir, caso venha misturado
+        if 'dt' in df_filtrado.columns:
+            df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
+
+        # 2. FILTROS
         assuntos = sorted(df_filtrado['assunto_desc'].unique())
         filtro = st.multiselect("Filtrar Assunto:", assuntos)
         
+        # Aplica filtro visual se houver
         df_view = df_filtrado[df_filtrado['assunto_desc'].isin(filtro)] if filtro else df_filtrado
         
-        cols_show = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'b', 'c']
+        # 3. COLUNAS (Modificado: Sai b/c, entra dt)
+        cols_show = ['loc', 'n', 'assunto_desc', 'condicao_desc', 'dt']
+        
+        # Garante que as colunas existem antes de mostrar
         cols_validas = [c for c in cols_show if c in df_view.columns]
         
+        # Seletor de colunas (para o usuário poder trazer 'b' e 'c' de volta se quiser)
+        cols_visiveis = st.multiselect(
+            "👁️ Colunas visíveis:",
+            options=df_view.columns,
+            default=cols_validas
+        )
+        
+        # Mostra a tabela
         evento = st.dataframe(
-            df_view[cols_validas],
-            use_container_width=True, height=600,
-            on_select="rerun", selection_mode="single-row", hide_index=True
+            df_view[cols_visiveis],
+            use_container_width=True, 
+            height=600,
+            on_select="rerun", 
+            selection_mode="single-row",
+            hide_index=True
         )
 
     # --- PAINEL DE DETALHES (LAYOUT NOVO) ---
