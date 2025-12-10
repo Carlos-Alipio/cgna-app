@@ -2,27 +2,23 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import text
 
-# Conexão centralizada
+# --- CONEXÃO CENTRALIZADA ---
 def get_connection():
     return st.connection("supabase", type="sql")
 
+# --- GERENCIAMENTO DE NOTAMS ---
 def salvar_notams(df):
     conn = get_connection()
     try:
-        # Abre a sessão
         with conn.session as s:
-            # Dica de Performance:
-            # 1. method='multi': Envia várias linhas em um único comando SQL (muito mais rápido)
-            # 2. chunksize=500: Envia de 500 em 500 para não travar a memória
-            
             with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
                 df.to_sql(
                     'notams', 
                     conn.engine, 
                     if_exists='replace', 
                     index=False, 
-                    chunksize=500, # Tamanho ideal para internet comum
-                    method='multi' # Turbo mode para SQL
+                    chunksize=500, 
+                    method='multi'
                 )
         return True
     except Exception as e:
@@ -32,11 +28,11 @@ def salvar_notams(df):
 def carregar_notams():
     conn = get_connection()
     try:
-        # ttl=0 garante que não pegue cache velho
         return conn.query('SELECT * FROM notams', ttl=0)
     except:
         return pd.DataFrame()
 
+# --- GERENCIAMENTO DE FROTA (ICAO) ---
 def carregar_frota_monitorada():
     conn = get_connection()
     try:
@@ -44,10 +40,34 @@ def carregar_frota_monitorada():
         return df['icao'].tolist() if not df.empty else []
     except:
         return []
-    
-# ... (código existente) ...
 
-# --- NOVAS FUNÇÕES PARA FILTROS CRÍTICOS ---
+def adicionar_icao(icao, desc):
+    conn = get_connection()
+    try:
+        with conn.session as s:
+            s.execute(
+                text("INSERT INTO frota_icao (icao, descricao) VALUES (:i, :d)"),
+                params={"i": icao.upper().strip(), "d": desc}
+            )
+            s.commit()
+        return True
+    except:
+        return False
+
+def remover_icao(icao):
+    conn = get_connection()
+    try:
+        with conn.session as s:
+            s.execute(
+                text("DELETE FROM frota_icao WHERE icao = :i"),
+                params={"i": icao}
+            )
+            s.commit()
+        return True
+    except:
+        return False
+
+# --- GERENCIAMENTO DE FILTROS CRÍTICOS (AS NOVAS FUNÇÕES) ---
 
 def carregar_filtros_configurados():
     """Retorna um DataFrame com todos os filtros salvos"""
@@ -55,6 +75,7 @@ def carregar_filtros_configurados():
     try:
         return conn.query("SELECT * FROM config_filtros", ttl=0)
     except:
+        # Se a tabela não existir ou estiver vazia, retorna estrutura vazia
         return pd.DataFrame(columns=['tipo', 'valor'])
 
 def atualizar_filtros_lote(tipo, lista_valores):
