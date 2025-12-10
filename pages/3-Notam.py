@@ -173,6 +173,8 @@ if not df_total.empty:
                 unsafe_allow_html=True
             )
 
+            st.divider()
+
             # JSON Técnico no final
             with st.expander("🔍 Ver JSON Bruto"):
                 st.json(dados.to_dict())
