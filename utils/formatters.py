@@ -1,6 +1,10 @@
 from datetime import datetime
 import pandas as pd
-from utils.notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION
+
+# --- CORREÇÃO AQUI ---
+# Removemos o ponto "." e usamos o nome da pasta "utils" direto.
+from utils.notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION 
+# ---------------------
 
 def formatar_data_notam(valor):
     """
@@ -23,7 +27,7 @@ def formatar_data_notam(valor):
         # TENTATIVA 1: Formato do Banco de Dados (ISO)
         # Se tiver traço e dois pontos (Ex: 2025-12-09 21:45:00)
         if "-" in texto and ":" in texto:
-            # O Pandas é muito bom em adivinhar formatos de banco
+            # O Pandas converte automaticamente
             data_obj = pd.to_datetime(texto)
             return data_obj.strftime("%d/%m/%Y %H:%M")
 
@@ -33,7 +37,7 @@ def formatar_data_notam(valor):
             return data_obj.strftime("%d/%m/%Y %H:%M")
             
     except Exception:
-        pass # Se der erro em qualquer conversão, cai aqui embaixo
+        pass 
 
     # Se não for data (ex: "PERM", "EST"), devolve o texto original
     return texto
