@@ -49,7 +49,7 @@ with st.container(border=True):
         
         if qtd_frota > 0:
             # --- MUDANÇA AQUI: Adicionada a hora UTC na frase ---
-            st.caption(f"📡 Status AISWEB: **{qtd_frota} Aeroportos** configurados. (Ref: {hora_utc})")
+            st.caption(f"📡 AISWEB: **{qtd_frota} Aeroportos** rastreados. (Atualizado: {hora_utc})")
         else:
             st.error("⚠️ **Alerta:** Nenhuma Aeroporto configurado. O banco ficará vazio.")
             st.caption("Vá em 'Configurações' para adicionar aeroportos.")
