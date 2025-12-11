@@ -1,70 +1,78 @@
 import pandas as pd
+from datetime import timedelta
 from utils import parser_notam
 
 def gerar_cronograma_detalhado(df_criticos):
     """
-    Recebe o DataFrame de NOTAMs Críticos e explode os horários
-    utilizando o algoritmo robusto de parsing (V24).
-    
-    Retorna: DataFrame com colunas [Localidade, NOTAM, Assunto, Condição, Inicio, Fim]
+    Recebe o DataFrame de NOTAMs Críticos.
+    1. Tenta ler o Item D (Dias/Horários complexos).
+    2. Se D for vazio/None, usa B e C como período único contínuo.
     """
     lista_expandida = []
 
     if df_criticos.empty:
         return pd.DataFrame()
 
-    # Itera sobre cada NOTAM crítico encontrado
     for index, row in df_criticos.iterrows():
         
-        # 1. Extrai dados básicos
+        # 1. Extração dos Dados
         icao = row.get('loc', '')
         num_notam = row.get('n', '')
         assunto = row.get('assunto_desc', '')
         condicao = row.get('condicao_desc', '')
         
-        # Campos crus para o Parser
-        item_b = row.get('b', '') # Data Início Raw (YYMMDDHHMM)
-        item_c = row.get('c', '') # Data Fim Raw
-        item_d = row.get('d', '') # Texto do Período
+        # Campos de Data/Texto
+        item_b_raw = row.get('b', '') # ex: '2512132000'
+        item_c_raw = row.get('c', '') # ex: '2512132115'
+        item_d_text = str(row.get('d', '')).strip() # ex: 'None', 'DLY...', ''
+
+        slots = []
+
+        # 2. Tenta Interpretar o Item D (Se não for "None")
+        # Verifica se tem texto útil (ignora 'None', 'nan', '')
+        tem_texto_d = item_d_text and item_d_text.upper() not in ['NONE', 'NAN', '']
         
-        # 2. Chama o Algoritmo Robusto (V24)
-        # Se tiver Item D, o parser resolve a complexidade (DLY, EXC, SR-SS...)
-        if item_d and str(item_d).strip() not in ['nan', 'None', '']:
-            slots = parser_notam.interpretar_periodo_atividade(item_d, icao, item_b, item_c)
-        else:
-            # 3. Fallback: Se NÃO tem Item D (ex: Fechamento contínuo/PERM)
-            # Criamos um único slot do Inicio (B) ao Fim (C)
-            dt_ini = parser_notam.parse_notam_date(item_b)
-            dt_fim = parser_notam.parse_notam_date(item_c)
+        if tem_texto_d:
+            # Tenta explodir os dias (DLY, EXC, SR-SS)
+            slots = parser_notam.interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw)
+
+        # 3. Lógica de Fallback (Plano B)
+        # Se não tinha Item D, OU se o parser retornou vazio (falha ou texto inválido)
+        # Devemos assumir que o NOTAM vale de B até C direto.
+        if not slots:
+            dt_ini = parser_notam.parse_notam_date(item_b_raw)
+            dt_fim = parser_notam.parse_notam_date(item_c_raw)
             
-            # Se não conseguiu ler as datas, pula
-            if not dt_ini:
-                continue
+            # Validação mínima: Precisa pelo menos da data de início
+            if dt_ini:
+                # Se não tem fim (ex: PERM), joga 30 dias pra frente ou usa o próprio início se for pontual
+                if not dt_fim: 
+                    # Se Item C for "PERM", define um horizonte visual
+                    if "PERM" in str(item_c_raw).upper():
+                        dt_fim = dt_ini + timedelta(days=30)
+                    else:
+                        # Se for erro de dado, assume fim = início (evento pontual) ou +1 hora
+                        dt_fim = dt_ini + timedelta(hours=1) 
                 
-            # Se não tem fim (PERM), define horizonte padrão (ex: +30 dias ou exibe PERM)
-            if not dt_fim: 
-                # Opção: Jogar para longe ou marcar flag. Vamos projetar 30 dias.
-                from datetime import timedelta
-                dt_fim = dt_ini + timedelta(days=30) 
+                # Cria o slot único
+                slots.append({'inicio': dt_ini, 'fim': dt_fim})
 
-            slots = [{'inicio': dt_ini, 'fim': dt_fim}]
-
-        # 4. Expande a lista principal com os slots calculados
+        # 4. Adiciona ao Relatório Final
         for slot in slots:
             lista_expandida.append({
                 'Localidade': icao,
                 'NOTAM': num_notam,
                 'Assunto': assunto,
                 'Condição': condicao,
-                'Data Inicial': slot['inicio'], # Objeto datetime real
-                'Data Final': slot['fim']       # Objeto datetime real
+                'Data Inicial': slot['inicio'],
+                'Data Final': slot['fim']
             })
 
-    # 5. Cria DataFrame Final
+    # 5. Gera DataFrame
     df_timeline = pd.DataFrame(lista_expandida)
     
-    # Ordena por Data e Localidade para facilitar leitura
     if not df_timeline.empty:
+        # Ordena cronologicamente
         df_timeline = df_timeline.sort_values(by=['Data Inicial', 'Localidade'])
 
     return df_timeline
