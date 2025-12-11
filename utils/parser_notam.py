@@ -60,12 +60,33 @@ def calculate_sun_times_utc(date_obj, lat, lon):
         return (results[0], results[1])
     except: return ('06:00', '18:00')
 
+# --- CORREÇÃO AQUI (PARSE DE HORA E MINUTO) ---
 def parse_notam_date(raw_str):
-    if not raw_str or len(str(raw_str)) < 6: return None
+    """
+    Converte string YYMMDDHHMM para datetime.
+    Ex: '2512132000' -> 2025-12-13 20:00:00
+    """
+    if not raw_str: return None
+    s = str(raw_str).strip()
+    if len(s) < 6: return None # Muito curto
+    
     try:
-        s = str(raw_str).strip()
-        return datetime(int(s[:2])+2000, int(s[2:4]), int(s[4:6]))
-    except: return None
+        # Extrai Data
+        year = int(s[:2]) + 2000
+        month = int(s[2:4])
+        day = int(s[4:6])
+        
+        # Extrai Hora (Se disponível)
+        hour = 0
+        minute = 0
+        if len(s) >= 10:
+            hour = int(s[6:8])
+            minute = int(s[8:10])
+            
+        return datetime(year, month, day, hour, minute)
+    except:
+        return None
+# ----------------------------------------------
 
 # ==============================================================================
 # 3. PARSER LÓGICO DE DATAS
@@ -84,14 +105,11 @@ def parse_segment_logic(text_segment, state_ctx):
         for d in [0,1,2,3,4]: weekdays_found.add(d)
         text_segment = text_segment.replace('WKDAYS', ' ').replace('WORKDAYS', ' ')
 
-    # --- NOVIDADE: TEOM (The End Of Month) ---
     if 'TEOM' in text_segment:
-        # Define fim como último dia do mês atual
         last_day = calendar.monthrange(curr_ano, curr_mes)[1]
         try:
             end = datetime(curr_ano, curr_mes, last_day)
-            # Se tivermos um start (hoje ou contexto), criamos o range
-            start = datetime(curr_ano, curr_mes, datetime.now().day) # Simplificação
+            start = datetime(curr_ano, curr_mes, datetime.now().day)
             ctx_start = start; ctx_end = end
             c = start
             while c <= end:
@@ -159,7 +177,7 @@ def parse_segment_logic(text_segment, state_ctx):
     return dias_coletados, weekdays_found, new_state
 
 # ==============================================================================
-# 4. FUNÇÃO PRINCIPAL (V24.0 - HJ/HN + ESPAÇOS + TEOM)
+# 4. FUNÇÃO PRINCIPAL
 # ==============================================================================
 def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
     """
@@ -179,16 +197,13 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
     texto = re.sub(r'([A-Z]{3})/([A-Z]{3})', r'\1', texto) 
     texto = re.sub(r'(\d{1,2})/(\d{1,2})', r'\1', texto)
     
-    # --- PADRONIZAÇÕES V24 ---
     replacements = {
         '0CT': 'OCT', '1AN': 'JAN', 'SR-SS': 'SR-SS', 'SS-SR': 'SS-SR', 
         'DAILY': 'DLY', 'EXCEPT': 'EXC',
-        'HJ': 'SR-SS', 'HN': 'SS-SR' # Traduz ICAO Codes para nosso padrão interno
+        'HJ': 'SR-SS', 'HN': 'SS-SR'
     } 
     for k, v in replacements.items(): texto = texto.replace(k, v)
 
-    # --- REGEX ROBUSTA V24 (Aceita espaços: 1200 - 1400) ---
-    # \d{4} \s* [/-] \s* \d{4}  -> Permite espaços opcionais ao redor do traço/barra
     regex_hora = re.compile(r'(\d{4}\s*[/-]\s*\d{4}|SR-SS|SS-SR|H24)')
     
     matches = list(regex_hora.finditer(texto))
@@ -199,7 +214,6 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
     last_end = 0 
     
     for match in matches:
-        # Limpa espaços do horário capturado (ex: "1000 - 1200" vira "1000-1200")
         horario_type = match.group(1).replace(' ', '')
         start_idx, end_idx = match.span()
         segmento_texto = texto[last_end:start_idx].strip()
@@ -268,22 +282,3 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
             output_list.append({'inicio': dt_inicio, 'fim': dt_fim})
 
     return output_list
-
-# ==============================================================================
-# TESTER
-# ==============================================================================
-if __name__ == "__main__":
-    print("🛠️ V24 - GOLD VERSION (HJ/HN + Spaces + Output Object)")
-    
-    txt = "DLY HJ EXC HOL" # Teste de HJ (SR-SS) + Feriado
-    icao = "SBGR"
-    b = "2512200000" # 20/Dez
-    c = "2512302359" # 30/Dez (Tem Natal no meio)
-    
-    print(f"\nTeste: {txt}")
-    res = interpretar_periodo_atividade(txt, icao, b, c)
-    
-    for r in res:
-        print(f"✅ {r['inicio']} -> {r['fim']}")
-    
-    print("\n(Verifique se dia 25/12 foi pulado e se o horário é do Sol)")
