@@ -76,3 +76,47 @@ def gerar_cronograma_detalhado(df_criticos):
         df_timeline = df_timeline.sort_values(by=['Data Inicial', 'Localidade'])
 
     return df_timeline
+
+    def filtrar_por_turno(df_timeline, data_referencia, turno):
+        """
+        Filtra os NOTAMs que colidem com o horário do turno selecionado.
+        Turnos (Range de 12h):
+        - MADRUGADA: 00:00 - 12:00
+        - MANHA:     06:00 - 18:00
+        - TARDE:     12:00 - 00:00 (Dia seguinte)
+        - NOITE:     18:00 - 06:00 (Dia seguinte)
+        """
+        if df_timeline.empty:
+            return pd.DataFrame()
+
+        # 1. Definição dos Horários do Turno
+        hora_inicio = 0
+        if turno == 'MADRUGADA': hora_inicio = 0
+        elif turno == 'MANHA':   hora_inicio = 6
+        elif turno == 'TARDE':   hora_inicio = 12
+        elif turno == 'NOITE':   hora_inicio = 18
+
+        # Cria datetime inicial do turno
+        dt_turno_inicio = datetime.combine(data_referencia, datetime.min.time()) + timedelta(hours=hora_inicio)
+        
+        # Cria datetime final do turno (+12 horas fixas conforme regra)
+        dt_turno_fim = dt_turno_inicio + timedelta(hours=12)
+
+        # 2. Lógica de Intersecção (Overlap)
+        # Regra: (InicioA < FimB) e (FimA > InicioB)
+        # A = Notam, B = Turno
+        
+        mask = (
+            (df_timeline['Data Inicial'] < dt_turno_fim) & 
+            (df_timeline['Data Final'] > dt_turno_inicio)
+        )
+        
+        df_turno = df_timeline[mask].copy()
+        
+        # 3. Adiciona informação visual para o relatório
+        if not df_turno.empty:
+            # Formata o cabeçalho do relatório
+            periodo_str = f"{dt_turno_inicio.strftime('%d/%m %H:%M')} até {dt_turno_fim.strftime('%d/%m %H:%M')}"
+            return df_turno, periodo_str
+        
+        return pd.DataFrame(), ""
