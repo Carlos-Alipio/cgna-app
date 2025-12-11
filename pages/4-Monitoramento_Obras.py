@@ -77,7 +77,6 @@ with tab_cronograma:
         
         if not df_dias.empty:
             df_view = df_dias.copy()
-            # Formatação dd/mm/yyyy hh:mm na aba 2 também
             df_view['Início'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
             df_view['Fim'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
             
@@ -91,14 +90,21 @@ with tab_cronograma:
         st.info("Sem dados.")
 
 # --------------------------------------------------------------------------
-# ABA 3: RELATÓRIO DE TURNO (FORMATADA COM ANO)
+# ABA 3: RELATÓRIO DE TURNO (DATA CORRIGIDA)
 # --------------------------------------------------------------------------
 with tab_turno:
     st.markdown("### 👮 Visão Operacional por Turno")
     
     c_data, c_turno, c_void = st.columns([2, 2, 1])
     with c_data:
-        data_selecionada = st.date_input("Data de Referência", value=date.today())
+        # --- MUDANÇA AQUI: Adicionado format="DD/MM/YYYY" ---
+        data_selecionada = st.date_input(
+            "Data de Referência", 
+            value=date.today(), 
+            format="DD/MM/YYYY"
+        )
+        # ----------------------------------------------------
+
     with c_turno:
         opcao_turno = st.selectbox("Selecione o Turno", ["MADRUGADA (00h-12h)", "MANHA (06h-18h)", "TARDE (12h-00h)", "NOITE (18h-06h)"])
         chave_turno = opcao_turno.split()[0] 
@@ -113,11 +119,8 @@ with tab_turno:
             st.info(f"### 🕒 Turno: {texto_periodo}")
             
             df_view = df_turno_result.copy()
-            
-            # --- MUDANÇA AQUI: FORMATO COM ANO (YYYY) ---
             df_view['Início Restrição'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
             df_view['Fim Restrição'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
-            # -------------------------------------------
             
             cols_show = ['Localidade', 'NOTAM', 'Assunto', 'Condição', 'Início Restrição', 'Fim Restrição', 'Texto']
             
