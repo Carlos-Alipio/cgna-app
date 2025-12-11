@@ -129,15 +129,23 @@ if not df_notams.empty:
                 df_dias = timeline_processor.gerar_cronograma_detalhado(df_critico)
 
             if not df_dias.empty:
-                # Formatação visual (Datetime -> String bonita)
+                # Cópia para formatação visual
                 df_view_dias = df_dias.copy()
                 
                 # Formata datas para o padrão brasileiro
                 df_view_dias['Início'] = df_view_dias['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
                 df_view_dias['Fim'] = df_view_dias['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
                 
-                # Calcula duração para facilitar análise
-                df_view_dias['Duração'] = df_dias['Data Final'] - df_dias['Data Inicial']
+                # --- NOVO CÁLCULO DE DURAÇÃO (HH:MM) ---
+                def format_duracao(row):
+                    delta = row['Data Final'] - row['Data Inicial']
+                    total_seconds = int(delta.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    return f"{hours:02d}:{minutes:02d}"
+
+                df_view_dias['Duração'] = df_dias.apply(format_duracao, axis=1)
+                # ---------------------------------------
                 
                 # Seleciona colunas finais
                 cols_finais = ['Localidade', 'NOTAM', 'Assunto', 'Condição', 'Início', 'Fim', 'Duração']
@@ -158,10 +166,10 @@ if not df_notams.empty:
                     file_name="cronograma_restricoes_detalhado.csv",
                     mime="text/csv",
                     type="primary",
-                    help="Baixa a lista explodida dia a dia, ideal para Excel."
+                    help="Baixa a lista explodida dia a dia com duração calculada."
                 )
             else:
-                st.warning("Não foi possível extrair datas específicas dos NOTAMs listados (verifique se possuem período válido).")
+                st.warning("Não foi possível extrair datas específicas dos NOTAMs listados.")
         else:
             st.info("Sem dados críticos para gerar cronograma.")
 
