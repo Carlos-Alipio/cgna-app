@@ -3,18 +3,67 @@ import math
 from datetime import datetime, timedelta
 
 # ==============================================================================
-# 1. DATABASE GEO & SOL
+# 1. DATABASE GEO (OFFLINE)
 # ==============================================================================
 AIRPORT_DB = {
     'SBGR': (-23.4355, -46.4731), 'SBSP': (-23.6261, -46.6564), 'SBGL': (-22.8089, -43.2436),
     'SBRJ': (-22.9100, -43.1625), 'SBCF': (-19.6244, -43.9719), 'SBKP': (-23.0069, -47.1344),
     'SBPA': (-29.9939, -51.1711), 'SBCT': (-25.5327, -49.1758), 'SBRF': (-8.1264,  -34.9228),
+    'SBSV': (-12.9086, -38.3225), 'SBFZ': (-3.7761,  -38.5322), 'SBBE': (-1.3847,  -48.4789),
     'SBBR': (-15.8697, -47.9208), 'SBEG': (-3.0386,  -60.0497)
 }
 
 def get_coords_from_db(icao):
     return AIRPORT_DB.get(str(icao).upper().strip())
 
+# ==============================================================================
+# 2. GESTÃO DE FERIADOS (BRASIL)
+# ==============================================================================
+def is_holiday(date_obj):
+    """Verifica se é feriado nacional brasileiro (Fixo ou Móvel)."""
+    ano = date_obj.year
+    mes = date_obj.month
+    dia = date_obj.day
+    
+    # Feriados Fixos
+    fixos = [
+        (1, 1),   # Confraternização Universal
+        (4, 21),  # Tiradentes
+        (5, 1),   # Trabalho
+        (9, 7),   # Independência
+        (10, 12), # N. Sra. Aparecida
+        (11, 2),  # Finados
+        (11, 15), # Proclamação da República
+        (12, 25)  # Natal
+    ]
+    if (mes, dia) in fixos: return True
+
+    # Feriados Móveis (Páscoa e derivados)
+    # Algoritmo de Meeus/Jones/Butcher para Páscoa
+    a = ano % 19; b = ano // 100; c = ano % 100
+    d = b // 4; e = b % 4; f = (b + 8) // 25
+    g = (b - f + 1) // 3; h = (19 * a + b - d - g + 15) % 30
+    i = c // 4; k = c % 4; l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month_easter = (h + l - 7 * m + 114) // 31
+    day_easter = ((h + l - 7 * m + 114) % 31) + 1
+    
+    dt_pascoa = datetime(ano, month_easter, day_easter)
+    dt_carnaval = dt_pascoa - timedelta(days=47)
+    dt_sexta_santa = dt_pascoa - timedelta(days=2)
+    dt_corpus = dt_pascoa + timedelta(days=60)
+
+    moveis = [dt_carnaval, dt_sexta_santa, dt_corpus]
+    
+    for feriado in moveis:
+        if feriado.month == mes and feriado.day == dia:
+            return True
+            
+    return False
+
+# ==============================================================================
+# 3. CÁLCULO SOLAR (NOAA)
+# ==============================================================================
 def calculate_sun_times_utc(date_obj, lat, lon):
     try:
         ZENITH = 90.8333; N = date_obj.timetuple().tm_yday; lngHour = lon / 15.0
@@ -43,31 +92,30 @@ def parse_notam_date(raw_str):
     except: return None
 
 # ==============================================================================
-# 2. PARSER DE SEGMENTOS (O CORAÇÃO DO SISTEMA)
+# 4. PARSER DE SEGMENTOS (COM HOL E WKDAYS)
 # ==============================================================================
 def parse_segment_logic(text_segment, state_ctx):
-    """
-    Lê um pedaço de texto (ex: 'DEC 01 TIL 05 MON') e retorna:
-    - Lista de Datas Específicas
-    - Set de Dias da Semana (Filtro)
-    - Novo Estado (Mês/Ano atualizados)
-    """
     mapa_meses = {'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12}
     mapa_semana = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6}
     
-    curr_mes = state_ctx['mes']
-    curr_ano = state_ctx['ano']
-    ctx_start = state_ctx['range_start']
-    ctx_end = state_ctx['range_end']
+    curr_mes = state_ctx['mes']; curr_ano = state_ctx['ano']
+    ctx_start = state_ctx['range_start']; ctx_end = state_ctx['range_end']
 
     dias_coletados = []
     weekdays_found = set()
+    
+    # --- NOVO: Lógica WKDAYS (Dias Úteis) ---
+    if 'WKDAYS' in text_segment or 'WORKDAYS' in text_segment:
+        # Adiciona Seg a Sex
+        for d in [0,1,2,3,4]: weekdays_found.add(d)
+        text_segment = text_segment.replace('WKDAYS', ' ').replace('WORKDAYS', ' ')
+        # WKDAYS implicitamente exclui HOL, mas vamos deixar o EXC HOL explicito tratar isso
+        # ou podemos assumir. Vamos deixar explícito por enquanto.
 
-    # 1. Extração de Semana (Range e Soltos)
+    # Extração de Semana
     regex_wk_range = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)'
     for m in re.finditer(regex_wk_range, text_segment):
-        curr = mapa_semana[m.group(1)]
-        end = mapa_semana[m.group(2)]
+        curr = mapa_semana[m.group(1)]; end = mapa_semana[m.group(2)]
         while True:
             weekdays_found.add(curr)
             if curr == end: break
@@ -76,51 +124,40 @@ def parse_segment_logic(text_segment, state_ctx):
 
     for k, v in mapa_semana.items():
         if k in text_segment:
-            weekdays_found.add(v)
-            text_segment = text_segment.replace(k, ' ')
+            weekdays_found.add(v); text_segment = text_segment.replace(k, ' ')
 
-    # 2. Tokenizer de Datas
+    # Tokenizer
     tokens = text_segment.split()
-    
-    # Se vazio, mas tem contexto de Range anterior, preenche
     if not tokens and ctx_start:
         c = ctx_start
         while c <= ctx_end:
-            dias_coletados.append(c)
-            c += timedelta(days=1)
+            dias_coletados.append(c); c += timedelta(days=1)
     else:
         i = 0
         while i < len(tokens):
             token = tokens[i]
-            
             if token in mapa_meses:
                 nm = mapa_meses[token]
                 if nm < curr_mes: curr_ano += 1
                 curr_mes = nm
-            
             elif token == 'TIL':
                 if dias_coletados and (i+1 < len(tokens)):
                     start = dias_coletados.pop()
                     prox = tokens[i+1]; i += 1
                     end_m = curr_mes; end_y = curr_ano
-                    
                     if prox in mapa_meses:
                         end_m = mapa_meses[prox]
                         if end_m < curr_mes: end_y += 1
                         if i+1 < len(tokens): prox = tokens[i+1]; i += 1
-                    
                     if prox.isdigit():
                         try:
                             end = datetime(end_y, end_m, int(prox))
                             ctx_start = start; ctx_end = end
-                            curr_mes = end_m; curr_ano = end_y # Atualiza estado
-                            
+                            curr_mes = end_m; curr_ano = end_y
                             c = start
                             while c <= end:
-                                dias_coletados.append(c)
-                                c += timedelta(days=1)
+                                dias_coletados.append(c); c += timedelta(days=1)
                         except: pass
-            
             elif token.isdigit():
                 try:
                     dt = datetime(curr_ano, curr_mes, int(token))
@@ -128,27 +165,24 @@ def parse_segment_logic(text_segment, state_ctx):
                 except: pass
             i += 1
         
-        # Fallback: Semana isolada sem datas usa contexto anterior
         if not dias_coletados and weekdays_found and ctx_start:
              c = ctx_start
              while c <= ctx_end:
-                 dias_coletados.append(c)
-                 c += timedelta(days=1)
+                 dias_coletados.append(c); c += timedelta(days=1)
 
-    # Retorna resultados e o estado atualizado para ser usado na próxima parte
-    new_state = {
-        'mes': curr_mes, 'ano': curr_ano, 
-        'range_start': ctx_start, 'range_end': ctx_end
-    }
+    new_state = {'mes': curr_mes, 'ano': curr_ano, 'range_start': ctx_start, 'range_end': ctx_end}
     return dias_coletados, weekdays_found, new_state
 
 # ==============================================================================
-# 3. SCANNER PRINCIPAL (V22.0)
+# 5. FUNÇÃO PRINCIPAL (PRODUÇÃO)
 # ==============================================================================
 def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
+    """
+    Retorna uma lista de dicionários estruturados:
+    [{'inicio': datetime, 'fim': datetime}, ...]
+    """
     if not isinstance(texto_bruto, str) or not texto_bruto: return []
 
-    # Setup
     coords = get_coords_from_db(icao) or (-15.7942, -47.8822)
     lat, lon = coords
     
@@ -165,20 +199,14 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
                     'DAILY': 'DLY', 'EXCEPT': 'EXC'} 
     for k, v in replacements.items(): texto = texto.replace(k, v)
 
-    # Regex Horários
     regex_hora = re.compile(r'(\d{4}[/-]\d{4}|SR-SS|SS-SR|H24)')
     matches = list(regex_hora.finditer(texto))
-    if not matches: return ["ERRO: Nenhum horário identificado."]
+    if not matches: return [] # Retorna lista vazia em vez de erro string
 
-    lista_deltas = []
+    # --- LISTA DE RESULTADOS ESTRUTURADA ---
+    output_list = [] 
     
-    # Estado Inicial
-    state = {
-        'ano': dt_notam_ini.year, 
-        'mes': dt_notam_ini.month, 
-        'range_start': None, 'range_end': None,
-        'cache_dias': []
-    }
+    state = {'ano': dt_notam_ini.year, 'mes': dt_notam_ini.month, 'range_start': None, 'range_end': None, 'cache_dias': []}
     last_end = 0 
     
     for match in matches:
@@ -187,66 +215,57 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
         segmento_texto = texto[last_end:start_idx].strip()
         last_end = end_idx
 
-        # --- LÓGICA DE INCLUSÃO / EXCLUSÃO ---
         dias_finais_slot = []
         
-        # Caso Vazio: Usa Cache
         if not segmento_texto and state['cache_dias']:
             dias_finais_slot = list(state['cache_dias'])
         else:
-            # Separa EXC
             parts = segmento_texto.split('EXC')
             part_in = parts[0].strip()
             part_ex = parts[1].strip() if len(parts) > 1 else ""
 
-            # 1. Processa INCLUSÃO
+            # INCLUSÃO
             candidatos = []
             wk_in = set()
-            
-            # Se for DLY, gera range completo
             if 'DLY' in part_in:
                 c = dt_notam_ini
                 while c <= dt_notam_fim:
-                    candidatos.append(c)
-                    c += timedelta(days=1)
-                part_in = part_in.replace('DLY', ' ') # Limpa para processar filtros de semana
-                # Processa apenas dias da semana restantes no DLY
+                    candidatos.append(c); c += timedelta(days=1)
+                part_in = part_in.replace('DLY', ' ')
                 _, wk_in, _ = parse_segment_logic(part_in, state)
             else:
-                # Parser padrão
                 candidatos, wk_in, state = parse_segment_logic(part_in, state)
 
-            # 2. Processa EXCLUSÃO (Se houver)
+            # EXCLUSÃO
             proibidos_dates = []
             wk_ex = set()
+            exc_hol = False # Flag para feriado
+            
             if part_ex:
-                # Usa o MESMO estado (mês/ano) que parou na inclusão
+                if 'HOL' in part_ex:
+                    exc_hol = True
+                    part_ex = part_ex.replace('HOL', ' ')
                 proibidos_dates, wk_ex, _ = parse_segment_logic(part_ex, state)
 
-            # 3. MATEMÁTICA DE CONJUNTO (Candidatos - Filtros - Exclusões)
+            # CONJUNTO
             candidatos_unicos = sorted(list(set(candidatos)))
-            
             tem_filtro_in = len(wk_in) > 0
             tem_filtro_ex = len(wk_ex) > 0
             
             for dt in candidatos_unicos:
-                # Regra 1: Filtro de Semana de Inclusão (Se existir MON WED, ignora TUE)
-                if tem_filtro_in and dt.weekday() not in wk_in:
-                    continue
+                if tem_filtro_in and dt.weekday() not in wk_in: continue
+                if dt in proibidos_dates: continue
+                if tem_filtro_ex and dt.weekday() in wk_ex: continue
                 
-                # Regra 2: Datas Proibidas (EXC DEC 25)
-                if dt in proibidos_dates:
-                    continue
-                
-                # Regra 3: Semana Proibida (EXC SUN)
-                if tem_filtro_ex and dt.weekday() in wk_ex:
-                    continue
+                # --- CHECK DE FERIADO ---
+                if exc_hol and is_holiday(dt):
+                    continue # Pula se for feriado e tiver EXC HOL
                 
                 dias_finais_slot.append(dt)
 
             state['cache_dias'] = dias_finais_slot
 
-        # --- GERAÇÃO FINAL ---
+        # GERAÇÃO FINAL (DATETIMES REAIS)
         for dt in dias_finais_slot:
             h_ini_str, h_fim_str = "00:00", "23:59"
             next_day = False
@@ -266,36 +285,40 @@ def interpretar_periodo_atividade(texto_bruto, icao, item_b_raw, item_c_raw):
                 next_day = True
             elif horario_type == 'H24': pass 
 
-            dt_i_str = f"{dt.strftime('%d/%m/%Y')} {h_ini_str}"
-            dt_f_obj = dt + timedelta(days=1) if next_day else dt
-            dt_f_str = f"{dt_f_obj.strftime('%d/%m/%Y')} {h_fim_str}"
-            lista_deltas.append(f"{dt_i_str}|{dt_f_str}")
+            # Monta Datetimes
+            h_i, m_i = map(int, h_ini_str.split(':'))
+            h_f, m_f = map(int, h_fim_str.split(':'))
+            
+            dt_inicio = dt.replace(hour=h_i, minute=m_i)
+            dt_fim = (dt + timedelta(days=1) if next_day else dt).replace(hour=h_f, minute=m_f)
+            
+            # Adiciona ao output como Objeto (fácil de usar no App)
+            output_list.append({
+                'inicio': dt_inicio,
+                'fim': dt_fim
+            })
 
-    return "\n".join(lista_deltas)
+    return output_list
 
 # ==============================================================================
-# TESTER
+# TESTER SIMPLIFICADO (PARA VISUALIZAR O JSON)
 # ==============================================================================
 if __name__ == "__main__":
-    print("🛠️ TESTER V22 - LÓGICA DE EXCLUSÃO (EXC)")
+    print("🛠️ V23 - PACOTE PRODUÇÃO (HOL + JSON)")
     
-    # Exemplo DLY EXC
-    txt = "DLY EXC SUN 0500-1000"
+    # Teste de Feriado (01/Maio e Natal)
+    txt = "DLY EXC HOL 1000-1200"
     icao = "SBGR"
-    b = "2512010000" # 01/Dez (Segunda)
-    c = "2512082359" # 08/Dez (Segunda)
+    b = "2504280000" # 28/Abril
+    c = "2505052359" # 05/Maio (Tem 1 de Maio no meio)
     
-    print(f"\nEntrada: {txt}\nRange: {b} a {c}")
-    print("Esperado: Seg a Sáb (Dia 07/Dez Dom deve sumir)")
-    print("-" * 40)
-    print(interpretar_periodo_atividade(txt, icao, b, c))
+    print(f"\nTeste Feriado: {txt} (Range {b}-{c})")
+    resultados = interpretar_periodo_atividade(txt, icao, b, c)
     
-    print("\n⌨️ MODO INTERATIVO")
-    u_icao = input("ICAO: ").upper()
-    u_b = input("Início (Item B): ")
-    u_c = input("Fim (Item C): ")
-    
-    while True:
-        t = input("\nItem D: ")
-        if t.lower() == 'sair': break
-        print(interpretar_periodo_atividade(t, u_icao, u_b, u_c))
+    for r in resultados:
+        # Formata bonito só para o print, mas o dado é objeto
+        i_fmt = r['inicio'].strftime("%d/%m/%Y %H:%M")
+        f_fmt = r['fim'].strftime("%H:%M")
+        print(f"📅 {i_fmt} -> {f_fmt}")
+        
+    print("\n⚠️ Note que dia 01/05 (Trabalho) não deve aparecer acima!")
