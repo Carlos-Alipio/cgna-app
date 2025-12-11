@@ -69,16 +69,46 @@ with tab_lista:
     else:
         st.info("Sem dados críticos.")
 
-# --- ABA 2: CRONOGRAMA ---
+# --- ABA 2: CRONOGRAMA (COM FILTROS) ---
 with tab_cronograma:
     if not df_critico.empty:
         with st.spinner("Gerando cronograma..."):
             df_dias = timeline_processor.gerar_cronograma_detalhado(df_critico)
         
         if not df_dias.empty:
+            # Prepara dados visuais
             df_view = df_dias.copy()
             df_view['Início'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
             df_view['Fim'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
+            
+            # --- ÁREA DE FILTROS ---
+            st.markdown("##### 🔍 Filtros do Cronograma")
+            col_f1, col_f2 = st.columns(2)
+            
+            # 1. Filtro Localidade
+            locs_disponiveis = sorted(df_view['Localidade'].unique())
+            with col_f1:
+                filtro_loc = st.multiselect("Filtrar por Localidade:", locs_disponiveis)
+            
+            # 2. Filtro NOTAM (Dinâmico: mostra só os NOTAMs das localidades selecionadas)
+            if filtro_loc:
+                notams_disponiveis = sorted(df_view[df_view['Localidade'].isin(filtro_loc)]['NOTAM'].unique())
+            else:
+                notams_disponiveis = sorted(df_view['NOTAM'].unique())
+                
+            with col_f2:
+                filtro_notam = st.multiselect("Filtrar por Número do NOTAM:", notams_disponiveis)
+
+            # --- APLICAÇÃO DOS FILTROS ---
+            if filtro_loc:
+                df_view = df_view[df_view['Localidade'].isin(filtro_loc)]
+            
+            if filtro_notam:
+                df_view = df_view[df_view['NOTAM'].isin(filtro_notam)]
+            # -----------------------------
+
+            # Exibição da Tabela Filtrada
+            st.markdown(f"**Exibindo {len(df_view)} registros de dias/horários**")
             
             st.dataframe(
                 df_view[['Localidade', 'NOTAM', 'Assunto', 'Condição', 'Início', 'Fim', 'Texto']],
@@ -86,25 +116,26 @@ with tab_cronograma:
                 height=500,
                 column_config={"Texto": st.column_config.TextColumn("Texto (e)", width="large")}
             )
+            
+            # Download dos dados filtrados
+            csv_dias = df_view.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Baixar Dados Filtrados (CSV)",
+                data=csv_dias,
+                file_name="cronograma_filtrado.csv",
+                mime="text/csv",
+                type="primary"
+            )
     else:
         st.info("Sem dados.")
 
-# --------------------------------------------------------------------------
-# ABA 3: RELATÓRIO DE TURNO (DATA CORRIGIDA)
-# --------------------------------------------------------------------------
+# --- ABA 3: RELATÓRIO DE TURNO ---
 with tab_turno:
     st.markdown("### 👮 Visão Operacional por Turno")
     
     c_data, c_turno, c_void = st.columns([2, 2, 1])
     with c_data:
-        # --- MUDANÇA AQUI: Adicionado format="DD/MM/YYYY" ---
-        data_selecionada = st.date_input(
-            "Data de Referência", 
-            value=date.today(), 
-            format="DD/MM/YYYY"
-        )
-        # ----------------------------------------------------
-
+        data_selecionada = st.date_input("Data de Referência", value=date.today(), format="DD/MM/YYYY")
     with c_turno:
         opcao_turno = st.selectbox("Selecione o Turno", ["MADRUGADA (00h-12h)", "MANHA (06h-18h)", "TARDE (12h-00h)", "NOITE (18h-06h)"])
         chave_turno = opcao_turno.split()[0] 
