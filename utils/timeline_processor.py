@@ -4,9 +4,8 @@ from utils import parser_notam
 
 def gerar_cronograma_detalhado(df_criticos):
     """
-    Recebe o DataFrame de NOTAMs Críticos.
-    1. Tenta ler o Item D (Dias/Horários complexos).
-    2. Se D for vazio/None, usa B e C como período único contínuo.
+    Recebe o DataFrame de NOTAMs Críticos e explode os horários.
+    Agora inclui o campo 'e' (Texto Completo).
     """
     lista_expandida = []
 
@@ -25,10 +24,11 @@ def gerar_cronograma_detalhado(df_criticos):
         item_b_raw = row.get('b', '')
         item_c_raw = row.get('c', '')
         item_d_text = str(row.get('d', '')).strip()
+        item_e_text = row.get('e', '') # <--- NOVO: Captura o texto completo
 
         slots = []
 
-        # 2. Tenta Interpretar o Item D (Se não for "None")
+        # 2. Tenta Interpretar o Item D
         tem_texto_d = item_d_text and item_d_text.upper() not in ['NONE', 'NAN', '']
         
         if tem_texto_d:
@@ -56,7 +56,8 @@ def gerar_cronograma_detalhado(df_criticos):
                 'Assunto': assunto,
                 'Condição': condicao,
                 'Data Inicial': slot['inicio'],
-                'Data Final': slot['fim']
+                'Data Final': slot['fim'],
+                'Texto': item_e_text # <--- NOVO: Salva na lista final
             })
 
     # 5. Gera DataFrame
@@ -70,11 +71,6 @@ def gerar_cronograma_detalhado(df_criticos):
 def filtrar_por_turno(df_timeline, data_referencia, turno):
     """
     Filtra os NOTAMs que colidem com o horário do turno selecionado.
-    Turnos (Range de 12h):
-    - MADRUGADA: 00:00 - 12:00
-    - MANHA:     06:00 - 18:00
-    - TARDE:     12:00 - 00:00 (Dia seguinte)
-    - NOITE:     18:00 - 06:00 (Dia seguinte)
     """
     if df_timeline.empty:
         return pd.DataFrame(), ""
@@ -86,22 +82,16 @@ def filtrar_por_turno(df_timeline, data_referencia, turno):
     elif turno == 'TARDE':   hora_inicio = 12
     elif turno == 'NOITE':   hora_inicio = 18
 
-    # Cria datetime inicial do turno
     dt_turno_inicio = datetime.combine(data_referencia, datetime.min.time()) + timedelta(hours=hora_inicio)
-    
-    # Cria datetime final do turno (+12 horas fixas)
     dt_turno_fim = dt_turno_inicio + timedelta(hours=12)
 
-    # 2. Lógica de Intersecção (Overlap)
-    # Regra: (InicioA < FimB) e (FimA > InicioB)
+    # 2. Lógica de Intersecção
     mask = (
         (df_timeline['Data Inicial'] < dt_turno_fim) & 
         (df_timeline['Data Final'] > dt_turno_inicio)
     )
     
     df_turno = df_timeline[mask].copy()
-    
-    # Formata texto do período para exibição
     periodo_str = f"{dt_turno_inicio.strftime('%d/%m %H:%M')} até {dt_turno_fim.strftime('%d/%m %H:%M')}"
     
     return df_turno, periodo_str
