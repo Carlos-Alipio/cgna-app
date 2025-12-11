@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from utils import db_manager, formatters
 
-st.set_page_config(page_title="Alertas Críticos", layout="wide")
-st.title("🚨 Monitoramento Crítico")
+st.set_page_config(page_title="Monitoramento Obras", layout="wide")
+st.title("🚨 Monitoramento Obras")
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:

@@ -16,6 +16,7 @@ conn = st.connection("supabase", type="sql")
 
 # --- LISTA VIP (Quem pode cadastrar) ---
 EMAILS_PERMITIDOS = [
+    "aguedespereira@voegol.com.br",
     "jsgalvao@voegol.com.br",
     "cafmorais@voegol.com.br" # <--- Coloque seu email aqui
 ]
