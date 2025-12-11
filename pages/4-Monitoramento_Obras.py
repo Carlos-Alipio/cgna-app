@@ -77,6 +77,7 @@ with tab_cronograma:
         
         if not df_dias.empty:
             df_view = df_dias.copy()
+            # Formatação dd/mm/yyyy hh:mm na aba 2 também
             df_view['Início'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
             df_view['Fim'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
             
@@ -90,7 +91,7 @@ with tab_cronograma:
         st.info("Sem dados.")
 
 # --------------------------------------------------------------------------
-# ABA 3: RELATÓRIO DE TURNO (ATUALIZADA)
+# ABA 3: RELATÓRIO DE TURNO (FORMATADA COM ANO)
 # --------------------------------------------------------------------------
 with tab_turno:
     st.markdown("### 👮 Visão Operacional por Turno")
@@ -112,10 +113,12 @@ with tab_turno:
             st.info(f"### 🕒 Turno: {texto_periodo}")
             
             df_view = df_turno_result.copy()
-            df_view['Início Restrição'] = df_view['Data Inicial'].dt.strftime('%d/%m %H:%M')
-            df_view['Fim Restrição'] = df_view['Data Final'].dt.strftime('%d/%m %H:%M')
             
-            # --- MUDANÇA: Exibe Texto (e) em vez de Duração ---
+            # --- MUDANÇA AQUI: FORMATO COM ANO (YYYY) ---
+            df_view['Início Restrição'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
+            df_view['Fim Restrição'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
+            # -------------------------------------------
+            
             cols_show = ['Localidade', 'NOTAM', 'Assunto', 'Condição', 'Início Restrição', 'Fim Restrição', 'Texto']
             
             st.dataframe(
@@ -124,18 +127,17 @@ with tab_turno:
                 hide_index=True,
                 height=500,
                 column_config={
-                    "Texto": st.column_config.TextColumn("Texto (e)", width="large") # Coluna larga para leitura
+                    "Texto": st.column_config.TextColumn("Texto (e)", width="large")
                 }
             )
             
-            # Texto para Copiar
             with st.expander("📋 Texto para Passagem de Serviço"):
-                texto_report = f"*PASSAGEM DE SERVIÇO - {chave_turno} ({data_selecionada.strftime('%d/%m')})*\n\n"
+                texto_report = f"*PASSAGEM DE SERVIÇO - {chave_turno} ({data_selecionada.strftime('%d/%m/%Y')})*\n\n"
                 for idx, row in df_view.iterrows():
                     texto_report += f"📍 *{row['Localidade']}* - {row['Assunto']}\n"
                     texto_report += f"   NOTAM: {row['NOTAM']}\n"
                     texto_report += f"   Vigência no Turno: {row['Início Restrição']}z até {row['Fim Restrição']}z\n"
-                    texto_report += f"   Detalhe: {row['Texto'][:100]}...\n\n" # Corta texto muito longo
+                    texto_report += f"   Detalhe: {row['Texto'][:100]}...\n\n"
                 st.text_area("Copiar", value=texto_report, height=300)
 
         else:
