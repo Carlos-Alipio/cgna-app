@@ -10,26 +10,35 @@ def get_usuario_cookie(cookie_manager):
     Recebe o cookie_manager instanciado no Home.py.
     """
     # Pega todos os cookies usando o manager passado
-    cookies = cookie_manager.get_all()
-    
-    if not cookies:
+    try:
+        cookies = cookie_manager.get_all()
+        if not cookies:
+            return None
+        return cookies.get("cgna_user_email")
+    except:
         return None
-        
-    return cookies.get("cgna_user_email")
 
 def realizar_login_cookie(cookie_manager, email):
     """
     Grava o email no cookie.
     Recebe o cookie_manager e o email.
+    
+    NOTA: Removemos o 'expires' pois a biblioteca extra_streamlit_components
+    não suporta esse argumento na versão Python, gerando TypeError.
+    O cookie será de sessão (apaga ao fechar o navegador).
     """
-    expires = datetime.datetime.now() + datetime.timedelta(days=7)
-    cookie_manager.set("cgna_user_email", email, expires=expires)
+    # O comando .set() desta biblioteca aceita apenas (cookie, value, key)
+    cookie_manager.set("cgna_user_email", email)
 
 def realizar_logout(cookie_manager):
     """
     Apaga o cookie e limpa a sessão.
     """
-    cookie_manager.delete("cgna_user_email")
+    # Tenta apagar o cookie
+    try:
+        cookie_manager.delete("cgna_user_email")
+    except:
+        pass
     
     if 'logado' in st.session_state:
         st.session_state['logado'] = False
