@@ -2,6 +2,7 @@ import streamlit as st
 import time
 import hashlib
 from sqlalchemy import text
+from utils import login_manager # <--- NOVO IMPORT
 
 # Configuração da Página
 st.set_page_config(
@@ -14,31 +15,33 @@ st.set_page_config(
 # Conexão com Supabase
 conn = st.connection("supabase", type="sql")
 
-# --- LISTA VIP (Quem pode cadastrar) ---
+# --- LISTA VIP ---
 EMAILS_PERMITIDOS = [
     "aguedespereira@voegol.com.br",
     "jsgalvao@voegol.com.br",
-    "cafmorais@voegol.com.br" # <--- Coloque seu email aqui
+    "cafmorais@voegol.com.br"
 ]
 
-# --- FUNÇÕES DE BANCO DE DADOS (AGORA COM SUPABASE) ---
+# --- FUNÇÕES DE BANCO DE DADOS ---
 def buscar_usuario_por_email(email):
     # ttl=0 garante que não pegue cache velho
-    df = conn.query(f"SELECT * FROM usuarios WHERE email = '{email}'", ttl=0)
-    if not df.empty:
-        return df.iloc[0] # Retorna a primeira linha encontrada
+    try:
+        # Sanitização básica para evitar erro de string vazia no SQL
+        if not email: return None
+        df = conn.query(f"SELECT * FROM usuarios WHERE email = '{email}'", ttl=0)
+        if not df.empty:
+            return df.iloc[0] 
+    except:
+        return None
     return None
 
 def salvar_novo_usuario(email, senha_hash, nome):
-    # 1. Verifica se já existe
     if buscar_usuario_por_email(email) is not None:
         return "erro_existe"
     
-    # 2. Verifica permissão
     if email not in EMAILS_PERMITIDOS:
         return "erro_permissao"
     
-    # 3. Insere no Supabase
     try:
         with conn.session as s:
             s.execute(
@@ -51,16 +54,38 @@ def salvar_novo_usuario(email, senha_hash, nome):
         st.error(f"Erro no banco: {e}")
         return "erro_banco"
 
-# --- FUNÇÃO HASH (Igual anterior) ---
+# --- FUNÇÃO HASH ---
 def criar_hash(senha_texto_puro):
     return hashlib.sha256(str.encode(senha_texto_puro)).hexdigest()
 
 def verificar_senha(senha_digitada, hash_armazenado):
     return criar_hash(senha_digitada) == hash_armazenado
 
-# --- LÓGICA DE SESSÃO ---
+# ==============================================================================
+# LÓGICA DE SESSÃO E COOKIE (AQUI ESTÁ A MÁGICA)
+# ==============================================================================
+
+# 1. Carrega o gerenciador de cookies (necessário para ler/gravar)
+cm = login_manager.get_cookie_manager()
+
+# 2. Inicializa variáveis de sessão se não existirem
 if 'logado' not in st.session_state:
     st.session_state['logado'] = False
+
+# 3. TENTATIVA DE LOGIN AUTOMÁTICO VIA COOKIE
+if not st.session_state['logado']:
+    email_cookie = login_manager.get_usuario_cookie()
+    if email_cookie:
+        # Se achou cookie, valida se o usuário ainda existe no banco
+        usuario_db = buscar_usuario_por_email(email_cookie)
+        if usuario_db is not None:
+            st.session_state['logado'] = True
+            st.session_state['usuario_atual'] = usuario_db['nome']
+            st.rerun() # Recarrega a página já logado
+
+# ==============================================================================
+# INTERFACE
+# ==============================================================================
 
 # ESCONDER MENU SE NÃO ESTIVER LOGADO
 if not st.session_state['logado']:
@@ -80,9 +105,14 @@ if not st.session_state['logado']:
             
             if usuario is not None:
                 if verificar_senha(senha_login, usuario['senha_hash']):
+                    # LOGIN SUCESSO
                     st.session_state['logado'] = True
                     st.session_state['usuario_atual'] = usuario['nome']
-                    st.success("Login aprovado!")
+                    
+                    # GRAVA O COOKIE PARA A PRÓXIMA VEZ
+                    login_manager.realizar_login_cookie(email_login)
+                    
+                    st.success("Login aprovado! Redirecionando...")
                     time.sleep(0.5)
                     st.rerun()
                 else:
@@ -103,7 +133,7 @@ if not st.session_state['logado']:
                 resultado = salvar_novo_usuario(novo_email, hash_senha, novo_nome)
                 
                 if resultado == "sucesso":
-                    st.success("Cadastrado no Supabase! Faça login na outra aba.")
+                    st.success("Cadastrado! Faça login na outra aba.")
                 elif resultado == "erro_permissao":
                     st.error("Email não autorizado na lista VIP.")
                 elif resultado == "erro_existe":
@@ -112,11 +142,11 @@ if not st.session_state['logado']:
                 st.warning("Preencha tudo.")
 
 else:
-    # TELA DE BEM-VINDO
+    # TELA DE BEM-VINDO (JÁ LOGADO)
     st.title(f"Olá, {st.session_state.get('usuario_atual', 'Usuário')}")
     st.success("Você está conectado ao banco de dados Nuvem ☁️")
     st.info("👈 Use o menu lateral para acessar os dados.")
     
+    # BOTÃO SAIR (Modificado para limpar cookie)
     if st.button("Sair"):
-        st.session_state['logado'] = False
-        st.rerun()
+        login_manager.realizar_logout()
