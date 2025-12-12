@@ -2,7 +2,8 @@ import streamlit as st
 import time
 import hashlib
 from sqlalchemy import text
-from utils import login_manager # <--- NOVO IMPORT
+import extra_streamlit_components as stx # <--- IMPORTANTE
+from utils import login_manager
 
 # Configuração da Página
 st.set_page_config(
@@ -11,6 +12,12 @@ st.set_page_config(
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
+
+# ==============================================================================
+# INICIALIZAÇÃO DO COOKIE MANAGER (UMA VEZ SÓ)
+# ==============================================================================
+# Criamos o componente aqui no topo para evitar DuplicateKey
+cookie_manager = stx.CookieManager(key="main_auth_interface")
 
 # Conexão com Supabase
 conn = st.connection("supabase", type="sql")
@@ -24,9 +31,7 @@ EMAILS_PERMITIDOS = [
 
 # --- FUNÇÕES DE BANCO DE DADOS ---
 def buscar_usuario_por_email(email):
-    # ttl=0 garante que não pegue cache velho
     try:
-        # Sanitização básica para evitar erro de string vazia no SQL
         if not email: return None
         df = conn.query(f"SELECT * FROM usuarios WHERE email = '{email}'", ttl=0)
         if not df.empty:
@@ -38,10 +43,8 @@ def buscar_usuario_por_email(email):
 def salvar_novo_usuario(email, senha_hash, nome):
     if buscar_usuario_por_email(email) is not None:
         return "erro_existe"
-    
     if email not in EMAILS_PERMITIDOS:
         return "erro_permissao"
-    
     try:
         with conn.session as s:
             s.execute(
@@ -54,7 +57,6 @@ def salvar_novo_usuario(email, senha_hash, nome):
         st.error(f"Erro no banco: {e}")
         return "erro_banco"
 
-# --- FUNÇÃO HASH ---
 def criar_hash(senha_texto_puro):
     return hashlib.sha256(str.encode(senha_texto_puro)).hexdigest()
 
@@ -62,32 +64,30 @@ def verificar_senha(senha_digitada, hash_armazenado):
     return criar_hash(senha_digitada) == hash_armazenado
 
 # ==============================================================================
-# LÓGICA DE SESSÃO E COOKIE (AQUI ESTÁ A MÁGICA)
+# LÓGICA DE SESSÃO
 # ==============================================================================
 
-# 1. Carrega o gerenciador de cookies (necessário para ler/gravar)
-cm = login_manager.get_cookie_manager()
-
-# 2. Inicializa variáveis de sessão se não existirem
 if 'logado' not in st.session_state:
     st.session_state['logado'] = False
 
-# 3. TENTATIVA DE LOGIN AUTOMÁTICO VIA COOKIE
+# TENTATIVA DE LOGIN AUTOMÁTICO VIA COOKIE
+# Passamos o cookie_manager criado no topo
 if not st.session_state['logado']:
-    email_cookie = login_manager.get_usuario_cookie()
+    # Pequena pausa para garantir que o componente JS carregou
+    time.sleep(0.1) 
+    email_cookie = login_manager.get_usuario_cookie(cookie_manager)
+    
     if email_cookie:
-        # Se achou cookie, valida se o usuário ainda existe no banco
         usuario_db = buscar_usuario_por_email(email_cookie)
         if usuario_db is not None:
             st.session_state['logado'] = True
             st.session_state['usuario_atual'] = usuario_db['nome']
-            st.rerun() # Recarrega a página já logado
+            st.rerun()
 
 # ==============================================================================
 # INTERFACE
 # ==============================================================================
 
-# ESCONDER MENU SE NÃO ESTIVER LOGADO
 if not st.session_state['logado']:
     st.markdown("""<style>[data-testid="stSidebar"] {display: none;}</style>""", unsafe_allow_html=True)
     
@@ -105,12 +105,11 @@ if not st.session_state['logado']:
             
             if usuario is not None:
                 if verificar_senha(senha_login, usuario['senha_hash']):
-                    # LOGIN SUCESSO
                     st.session_state['logado'] = True
                     st.session_state['usuario_atual'] = usuario['nome']
                     
-                    # GRAVA O COOKIE PARA A PRÓXIMA VEZ
-                    login_manager.realizar_login_cookie(email_login)
+                    # GRAVA COOKIE (Passando o manager)
+                    login_manager.realizar_login_cookie(cookie_manager, email_login)
                     
                     st.success("Login aprovado! Redirecionando...")
                     time.sleep(0.5)
@@ -142,11 +141,10 @@ if not st.session_state['logado']:
                 st.warning("Preencha tudo.")
 
 else:
-    # TELA DE BEM-VINDO (JÁ LOGADO)
     st.title(f"Olá, {st.session_state.get('usuario_atual', 'Usuário')}")
     st.success("Você está conectado ao banco de dados Nuvem ☁️")
     st.info("👈 Use o menu lateral para acessar os dados.")
     
-    # BOTÃO SAIR (Modificado para limpar cookie)
+    # BOTÃO SAIR (Passando o manager)
     if st.button("Sair"):
-        login_manager.realizar_logout()
+        login_manager.realizar_logout(cookie_manager)
