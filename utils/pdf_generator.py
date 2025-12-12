@@ -30,9 +30,7 @@ class RelatorioPDF(FPDF):
         self.set_fill_color(240, 240, 240)
         self.set_font('Arial', 'B', 8)
         
-        # Ajuste fino das larguras para caber data+hora
-        # Total A4 ~190mm
-        # Loc(13), Notam(22), Desc(85), Ini(25), Fim(25), Status(20)
+        # Larguras (Soma 190)
         self.cell(13, 8, 'Loc', 1, 0, 'C', True)
         self.cell(22, 8, 'N NOTAM', 1, 0, 'C', True)
         self.cell(85, 8, 'Descrição', 1, 0, 'L', True)
@@ -72,19 +70,18 @@ def formatar_data_inteligente(data_hora_str, data_ref_relatorio):
 def gerar_pdf_turno(df_turno, turno_nome, data_ref_str):
     """
     Gera o PDF com base no DataFrame do turno filtrado.
-    data_ref_str: 'dd/mm/yyyy'
     """
     pdf = RelatorioPDF(turno_nome, data_ref_str)
     pdf.alias_nb_pages()
     pdf.add_page()
     pdf.set_font('Arial', '', 7)
 
-    # Larguras (Soma 190)
+    # Larguras
     w_loc = 13
     w_notam = 22
     w_desc = 85
-    w_ini = 25  # Aumentado para caber dd/mm hh:mm
-    w_fim = 25  # Aumentado
+    w_ini = 25
+    w_fim = 25
     w_status = 20
     
     line_height = 5
@@ -94,39 +91,33 @@ def gerar_pdf_turno(df_turno, turno_nome, data_ref_str):
         notam = str(row.get('NOTAM', ''))
         descricao = str(row.get('Texto', '')).replace('\n', ' ')
         
-        # --- LÓGICA DE DATA INTELIGENTE ---
+        # Formatação Inteligente de Data
         raw_ini = str(row.get('Início Restrição', ''))
         raw_fim = str(row.get('Fim Restrição', ''))
-        
         texto_ini = formatar_data_inteligente(raw_ini, data_ref_str)
         texto_fim = formatar_data_inteligente(raw_fim, data_ref_str)
         
         status = "Confirmado"
 
-        # --- DESENHO DA TABELA ---
+        # --- LÓGICA DE DESENHO DA TABELA ---
         x_start = pdf.get_x()
         y_start = pdf.get_y()
         
         # Verifica quebra de página
-        pdf.set_xy(x_start + w_loc + w_notam, y_start)
-        # Calcula altura necessária para a descrição (sem desenhar borda ainda)
-        # MultiCell retorna None no FPDF2 novo, usamos verificação de Y
+        # Heurística: Se passar de 270mm (perto do fim A4), quebra
         if y_start > 270: 
             pdf.add_page()
             y_start = pdf.get_y()
             x_start = pdf.get_x()
 
-        # 1. Desenha a Descrição para definir altura da linha
+        # 1. Desenha a Descrição (MultiCell) para medir a altura
         pdf.set_xy(x_start + w_loc + w_notam, y_start)
         pdf.multi_cell(w_desc, line_height, descricao, border=0, align='L')
         
         y_end = pdf.get_y()
         row_height = max(y_end - y_start, line_height)
         
-        # Se a descrição for muito curta, o row_height é 5.
-        # Se for longa, o row_height cresce.
-        
-        # 2. Volta e desenha as colunas fixas com a altura calculada (row_height)
+        # 2. Volta e desenha as colunas fixas com a altura calculada
         pdf.set_xy(x_start, y_start)
         
         # Loc
@@ -138,7 +129,7 @@ def gerar_pdf_turno(df_turno, turno_nome, data_ref_str):
         pdf.set_xy(x_start + w_loc + w_notam, y_start)
         pdf.rect(pdf.get_x(), pdf.get_y(), w_desc, row_height)
         
-        # Início (Agora com espaço para data se precisar)
+        # Início
         pdf.set_xy(x_start + w_loc + w_notam + w_desc, y_start)
         pdf.cell(w_ini, row_height, texto_ini, 1, 0, 'C')
         
@@ -148,5 +139,7 @@ def gerar_pdf_turno(df_turno, turno_nome, data_ref_str):
         # Status
         pdf.cell(w_status, row_height, status, 1, 1, 'C') # Quebra linha
 
-    # Retorna bytes do PDF
+    # --- RETORNO CORRIGIDO ---
+    # FPDF2 retorna bytearray. Convertemos para bytes puros.
+    # Não usamos .encode() aqui.
     return bytes(pdf.output())
