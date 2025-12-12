@@ -3,8 +3,8 @@ import pandas as pd
 from datetime import datetime, date
 from utils import db_manager, formatters, timeline_processor, pdf_generator
 
-st.set_page_config(page_title="Alertas Críticos", layout="wide")
-st.title("🚨 Monitoramento Crítico")
+st.set_page_config(page_title="Alertas de Obras", layout="wide")
+st.title("🚨 Monitoramento NOTAM")
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
@@ -58,7 +58,7 @@ if not df_notams.empty:
 # ==============================================================================
 # 3. INTERFACE DE ABAS
 # ==============================================================================
-tab_lista, tab_cronograma, tab_turno = st.tabs(["📋 Lista de NOTAMs", "📅 Cronograma Geral", "👮 Relatório de Turno"])
+tab_lista, tab_cronograma, tab_turno = st.tabs(["📋 Lista de NOTAMs", "📅 Cronograma Geral", "Relatório de Turno"])
 
 # --------------------------------------------------------------------------
 # ABA 1: VISÃO GERAL (LISTA DE NOTAMS)

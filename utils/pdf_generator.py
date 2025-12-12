@@ -12,7 +12,7 @@ class RelatorioPDF(FPDF):
     def header(self):
         # Logo / Texto CONA
         self.set_font('Arial', 'B', 16)
-        self.cell(30, 10, 'CONA', 0, 0, 'L')
+        self.cell(30, 10, 'CGNA', 0, 0, 'L')
         
         # Títulos Centralizados
         self.set_font('Arial', 'B', 12)
