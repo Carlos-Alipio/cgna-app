@@ -3,7 +3,7 @@
 primaryColor = "#6C63FF"
 
 # Cor de fundo da área principal - Cinza bem escuro
-backgroundColor = "#0E1117"
+backgroundColor = "#23262cff"
 
 # Cor de fundo da barra lateral - Um pouco mais claro que o fundo
 secondaryBackgroundColor = "#262730"
