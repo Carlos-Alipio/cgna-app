@@ -2,8 +2,8 @@ import streamlit as st
 import extra_streamlit_components as stx
 import datetime
 
-# Inicializa o gerenciador
-@st.cache_resource(experimental_allow_widgets=True)
+# --- CORREÇÃO AQUI: Removemos o parâmetro experimental ---
+@st.cache_resource
 def get_cookie_manager():
     return stx.CookieManager()
 
@@ -12,8 +12,14 @@ def get_usuario_cookie():
     Tenta recuperar o email do usuário salvo no cookie.
     Retorna o email (str) ou None.
     """
+    # Pausa para garantir que o componente carregou
     cookie_manager = get_cookie_manager()
     cookies = cookie_manager.get_all()
+    
+    # Adiciona verificação de segurança se cookies for None
+    if not cookies:
+        return None
+        
     return cookies.get("cgna_user_email")
 
 def realizar_login_cookie(email):
@@ -31,6 +37,10 @@ def realizar_logout():
     """
     cookie_manager = get_cookie_manager()
     cookie_manager.delete("cgna_user_email")
-    st.session_state['logado'] = False
-    st.session_state['usuario_atual'] = None
+    
+    if 'logado' in st.session_state:
+        st.session_state['logado'] = False
+    if 'usuario_atual' in st.session_state:
+        st.session_state['usuario_atual'] = None
+        
     st.rerun()
