@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from utils import db_manager, formatters, timeline_processor
+from utils import db_manager, formatters, timeline_processor, pdf_generator # <--- ADICIONE pdf_generator
 
 st.set_page_config(page_title="Alertas Críticos", layout="wide")
 st.title("🚨 Monitoramento Crítico")
@@ -174,5 +175,91 @@ with tab_turno:
 
         else:
             st.success(f"✅ Nenhuma restrição crítica prevista para este turno.")
+    else:
+        st.warning("Sem dados críticos carregados.")
+
+# ... (Todo o código anterior até a Aba 3) ...
+
+# --------------------------------------------------------------------------
+# ABA 3: RELATÓRIO DE TURNO
+# --------------------------------------------------------------------------
+with tab_turno:
+    st.markdown("### 👮 Visão Operacional por Turno")
+    
+    c_data, c_turno, c_void = st.columns([2, 2, 1])
+    with c_data:
+        data_selecionada = st.date_input("Data de Referência", value=date.today(), format="DD/MM/YYYY")
+    with c_turno:
+        opcao_turno = st.selectbox(
+            "Selecione o Turno", 
+            [
+                "MADRUGADA (03h-15h UTC)", 
+                "MANHA (09h-21h UTC)", 
+                "TARDE (15h-03h UTC)", 
+                "NOITE (21h-09h UTC)"
+            ]
+        )
+        chave_turno = opcao_turno.split()[0] 
+
+    if not df_critico.empty:
+        df_timeline_full = timeline_processor.gerar_cronograma_detalhado(df_critico)
+        df_turno_result, texto_periodo = timeline_processor.filtrar_por_turno(df_timeline_full, data_selecionada, chave_turno)
+
+        st.markdown("---")
+        
+        if not df_turno_result.empty:
+            st.info(f"### 🕒 Turno: {texto_periodo}")
+            
+            # Prepara dados para exibição e PDF
+            df_view = df_turno_result.copy()
+            df_view['Início Restrição'] = df_view['Data Inicial'].dt.strftime('%d/%m/%Y %H:%M')
+            df_view['Fim Restrição'] = df_view['Data Final'].dt.strftime('%d/%m/%Y %H:%M')
+            
+            # Colunas para visualização na tela
+            cols_show = ['Localidade', 'NOTAM', 'Assunto', 'Condição', 'Início Restrição', 'Fim Restrição', 'Texto']
+            
+            st.dataframe(
+                df_view[cols_show],
+                use_container_width=True,
+                hide_index=True,
+                height=400,
+                column_config={"Texto": st.column_config.TextColumn("Texto (e)", width="large")}
+            )
+            
+            # --- ÁREA DE EXPORTAÇÃO ---
+            col_pdf, col_copy = st.columns([1, 2])
+            
+            with col_pdf:
+                st.write("#### 📤 Exportar Relatório")
+                # Gera o PDF em memória
+                pdf_bytes = pdf_generator.gerar_relatorio_pdf(
+                    df_view, 
+                    chave_turno, 
+                    data_selecionada.strftime('%d/%m/%Y')
+                )
+                
+                # Nome do arquivo dinâmico
+                nome_arq = f"Relatorio_Turno_{chave_turno}_{data_selecionada.strftime('%d%m%Y')}.pdf"
+                
+                st.download_button(
+                    label="📄 Baixar PDF (Layout CONA)",
+                    data=pdf_bytes,
+                    file_name=nome_arq,
+                    mime="application/pdf",
+                    type="primary"
+                )
+
+            with col_copy:
+                with st.expander("📋 Texto para Passagem de Serviço (WhatsApp/E-mail)"):
+                    texto_report = f"*PASSAGEM DE SERVIÇO - {chave_turno} ({data_selecionada.strftime('%d/%m/%Y')})*\n\n"
+                    for idx, row in df_view.iterrows():
+                        texto_report += f"📍 *{row['Localidade']}* - {row['Assunto']}\n"
+                        texto_report += f"   NOTAM: {row['NOTAM']}\n"
+                        texto_report += f"   Vigência: {row['Início Restrição']}z até {row['Fim Restrição']}z\n"
+                        texto_report += f"   Obs: {row['Texto'][:150]}...\n\n"
+                    st.text_area("Texto Copiável", value=texto_report, height=200, label_visibility="collapsed")
+
+        else:
+            st.success(f"✅ Nenhuma restrição crítica prevista para o turno {chave_turno}.")
     else:
         st.warning("Sem dados críticos carregados.")
