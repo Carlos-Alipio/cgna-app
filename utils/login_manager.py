@@ -2,10 +2,11 @@ import streamlit as st
 import extra_streamlit_components as stx
 import datetime
 
-# --- CORREÇÃO AQUI: Removemos o parâmetro experimental ---
-@st.cache_resource
+# --- CORREÇÃO: Removemos o @st.cache_resource ---
+# Widgets não podem ser cacheados.
 def get_cookie_manager():
-    return stx.CookieManager()
+    # Definimos uma chave fixa para evitar duplicidade de IDs
+    return stx.CookieManager(key="main_auth_cookie_manager")
 
 def get_usuario_cookie():
     """
@@ -13,6 +14,7 @@ def get_usuario_cookie():
     Retorna o email (str) ou None.
     """
     # Pausa para garantir que o componente carregou
+    # Nota: Instanciamos o manager aqui para ler os cookies
     cookie_manager = get_cookie_manager()
     cookies = cookie_manager.get_all()
     
