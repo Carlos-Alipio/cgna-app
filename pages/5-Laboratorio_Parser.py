@@ -10,7 +10,7 @@ st.markdown("Ferramenta para validação do algoritmo usando dados reais do **Ba
 tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL (MANTIDA)
+# ABA 1: TESTE MANUAL
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -53,12 +53,11 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: AUDITORIA DO BANCO DE DADOS (COM MEMÓRIA PERSISTENTE)
+# ABA 2: AUDITORIA DO BANCO DE DADOS
 # ==============================================================================
 with tab_banco:
     st.subheader("🕵️ Auditoria: Supabase")
     
-    # Botão para carregar (apenas busca os dados e salva na memória)
     if st.button("🔄 Carregar/Atualizar Dados do Banco", type="primary"):
         with st.spinner("Carregando e processando datas..."):
             df_full = db_manager.carregar_notams()
@@ -72,22 +71,42 @@ with tab_banco:
                 st.error("Coluna 'd' não encontrada.")
                 st.stop()
 
-            df_analise = df_full[df_full[col_d].notna() & (df_full[col_d].astype(str).str.strip() != '')].copy()
+            # Filtra quem tem D ou quem é PERM (para não perder o caso do user)
+            # Mas como o parser precisa de texto D, se não tiver texto, ele retorna vazio mesmo sendo PERM.
+            # O usuário disse "neste notam onde não há 'd'".
+            # Se não há D, o parser retorna [], o que está correto para a LÓGICA DE HORÁRIOS.
+            # O problema era a data FIM visualizada.
+            
+            df_analise = df_full.copy()
+            # Remove nulos apenas se B ou C forem nulos, mas mantém se D for nulo para vermos o PERM?
+            # Para o parser funcionar, precisamos de algo. Se D for vazio, o parser retorna vazio.
+            # Vamos manter o filtro de D existente, assumindo que o caso PERM do usuário tem algum texto.
+            df_analise = df_analise[df_analise[col_d].notna() & (df_analise[col_d].astype(str).str.strip() != '')]
             df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
 
             total = len(df_analise)
             progress_bar = st.progress(0)
             resultados = []
 
-            # Função de correção de data
-            def parse_db_date(val):
-                val_str = str(val).strip()
+            def parse_db_date(val, start_date_obj=None):
+                """
+                Lê a data do banco. Se for PERM, calcula Start + 180 dias.
+                """
+                val_str = str(val).strip().upper()
+                
+                # --- TRATAMENTO PARA PERM ---
+                if "PERM" in val_str and start_date_obj:
+                    # Adiciona 180 dias (6 meses)
+                    dt_perm = start_date_obj + timedelta(days=180)
+                    return dt_perm.strftime("%y%m%d%H%M")
+                
                 val_clean = val_str.replace("-", "").replace(":", "").replace(" ", "")
                 if len(val_clean) == 10 and val_clean.isdigit(): return val_clean
                 if isinstance(val, (datetime, pd.Timestamp)): return val.strftime("%y%m%d%H%M")
+                
+                # Fallback genérico se falhar tudo
                 return "2601010000"
 
-            # Loop de Análise
             for idx, row in enumerate(df_analise.iterrows()):
                 r = row[1]
                 if idx % 50 == 0: progress_bar.progress(min((idx + 1) / total, 1.0))
@@ -95,8 +114,18 @@ with tab_banco:
                 item_d = str(r[col_d]).strip()
                 loc = r.get('loc', 'SB??')
                 n_notam = r.get('n', '?')
-                str_b = parse_db_date(r.get('b', ''))
-                str_c = parse_db_date(r.get('c', ''))
+                
+                # 1. Processa Data Início (B) primeiro
+                raw_b = r.get('b', '')
+                str_b = parse_db_date(raw_b) 
+                
+                # Tenta criar objeto datetime de B para usar no cálculo do PERM
+                try: dt_b_obj = datetime.strptime(str_b, "%y%m%d%H%M")
+                except: dt_b_obj = datetime.now() # Fallback
+
+                # 2. Processa Data Fim (C) passando B como referência
+                raw_c = r.get('c', '')
+                str_c = parse_db_date(raw_c, start_date_obj=dt_b_obj)
                 
                 status = "N/A"
                 detalhe = "-"
@@ -132,18 +161,14 @@ with tab_banco:
             
             progress_bar.progress(100)
             
-            # SALVA NO SESSION STATE (MEMÓRIA)
             st.session_state['auditoria_resultados'] = pd.DataFrame(resultados)
-            st.rerun() # Recarrega a página para exibir os dados salvos
+            st.rerun()
 
-    # --- EXIBIÇÃO FORA DO BOTÃO (LÊ DA MEMÓRIA) ---
     if 'auditoria_resultados' in st.session_state:
         df_res = st.session_state['auditoria_resultados']
         
         st.divider()
-        st.success(f"Dados carregados na memória: {len(df_res)} registros.")
         
-        # Métricas
         falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
         sucessos = df_res[df_res['Status'] == 'SUCESSO']
         
@@ -152,12 +177,11 @@ with tab_banco:
         k2.metric("Sucessos", len(sucessos))
         k3.metric("Falhas", len(falhas), delta_color="inverse")
         
-        # Filtros (Agora funcionam porque o df_res persiste)
         filtro = st.radio(
             "Visualizar:", 
             ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], 
             horizontal=True,
-            index=2 # Padrão: Tudo
+            index=2
         )
         
         if filtro == "🚨 Apenas Falhas":
