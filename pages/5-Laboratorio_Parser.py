@@ -70,8 +70,7 @@ with tab_lote:
         st.write("")
         btn_iniciar = st.button("🚀 Iniciar Auditoria", type="primary")
 
-    # Credenciais e URL
-    API_URL = "http://aisweb.decea.mil.br/api/" # Ajustado conforme seu snippet
+    API_URL = "http://aisweb.decea.mil.br/api/"
     API_KEY = "1279934730"
     API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
 
@@ -79,69 +78,58 @@ with tab_lote:
         status_text = st.empty()
         progress_bar = st.progress(0)
         
-        # Define os códigos de consulta
+        # --- BUSCA ---
         if brasil_todo:
-            # As 5 FIRs do Brasil via icaocode
             icaos_consulta = "SBAZ,SBBS,SBCW,SBRE,SBAO"
-            msg_busca = "Baixando dados completos das 5 FIRs (Isso pode levar alguns segundos)..."
+            msg_busca = "Baixando dados completos das 5 FIRs..."
         else:
             icaos_consulta = icaos_teste.replace(" ", "")
             msg_busca = f"Baixando dados de: {icaos_consulta}..."
 
         status_text.info(f"📡 {msg_busca}")
-        
         todos_items_xml = []
         
         try:
-            # Chamada Única e Robusta
             params = {
-                'apiKey': API_KEY, 
-                'apiPass': API_PASS, 
-                'area': 'notam', 
-                'icaocode': icaos_consulta
+                'apiKey': API_KEY, 'apiPass': API_PASS, 'area': 'notam', 'icaocode': icaos_consulta
             }
-            
-            # Timeout de 60s para garantir o download das FIRs
             response = requests.get(API_URL, params=params, timeout=60)
-            
             if response.status_code == 200:
                 try:
                     root = ET.fromstring(response.content)
                     todos_items_xml = root.findall("notam")
-                except ET.ParseError:
-                    st.error("Erro ao processar o XML retornado (arquivo corrompido ou incompleto).")
+                except:
+                    st.error("XML inválido.")
                     st.stop()
             else:
-                st.error(f"Erro na API DECEA: {response.status_code}")
+                st.error(f"Erro API: {response.status_code}")
                 st.stop()
-                
         except Exception as e:
-            st.error(f"Erro de conexão: {e}")
+            st.error(f"Erro conexão: {e}")
             st.stop()
 
         total_items = len(todos_items_xml)
         if total_items == 0:
-            st.warning("Nenhum dado encontrado.")
+            st.warning("Nenhum dado.")
             st.stop()
 
         status_text.info(f"Processando {total_items} NOTAMs...")
         resultados_lote = []
 
-        # Helper Data API (YYYY-MM-DD HH:MM:SS -> YYMMDDHHMM)
         def fmt_api_date(d_str):
             if not d_str: return "2501010000"
             try: return datetime.strptime(d_str, "%Y-%m-%d %H:%M:%S").strftime("%y%m%d%H%M")
             except: return "2501010000"
 
-        # Helper Extração Segura XML
         def safe_get(item, tag):
             f = item.find(tag)
             return f.text if f is not None and f.text else ""
 
-        # LOOP DE ANÁLISE
+        # --- LOOP ANÁLISE ---
+        count_com_item_d = 0
+        
         for i, item in enumerate(todos_items_xml):
-            if i % (total_items // 20 + 1) == 0: 
-                progress_bar.progress((i + 1) / total_items)
+            if i % (total_items // 20 + 1) == 0: progress_bar.progress((i + 1) / total_items)
             
             notam_id = safe_get(item, "notam_id")
             loc = safe_get(item, "loc")
@@ -149,89 +137,87 @@ with tab_lote:
             dt_fim = safe_get(item, "dt_fim")
             texto = safe_get(item, "texto")
             
-            # Extrai Item D (Regex procura D) até E) ou fim)
             match_d = re.search(r'(?:^|\s)D\)\s*(.*?)(?=\s*[E-G]\)|\s*$)', texto, re.DOTALL)
             item_d = match_d.group(1).strip() if match_d else None
             
-            status = "N/A"
-            res_parser_str = "-"
-            
-            if item_d:
-                if item_d.upper() in ["NIL", "NONE", ""]:
-                    status = "IGNORADO (NIL)"
-                else:
-                    try:
-                        res = parser_notam.interpretar_periodo_atividade(
-                            item_d, loc, fmt_api_date(dt_ini), fmt_api_date(dt_fim)
-                        )
-                        if res:
-                            status = "SUCESSO"
-                            res_parser_str = f"{len(res)} dias gerados"
-                        else:
-                            status = "FALHA"
-                    except:
-                        status = "ERRO CÓDIGO"
-            else:
-                status = "SEM ITEM D"
+            # SÓ ADICIONA NA LISTA SE TIVER ITEM D VÁLIDO (IGNORA NIL/NONE)
+            if item_d and item_d.upper() not in ["NIL", "NONE", ""]:
+                count_com_item_d += 1
+                status = "N/A"
+                res_visual = "-"
+                
+                try:
+                    res = parser_notam.interpretar_periodo_atividade(
+                        item_d, loc, fmt_api_date(dt_ini), fmt_api_date(dt_fim)
+                    )
+                    if res:
+                        status = "SUCESSO"
+                        # Cria um resumo visual: "5 dias (20/01, 21/01...)"
+                        dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
+                        if len(res) > 3: dias_str += "..."
+                        res_visual = f"{len(res)} dias ({dias_str})"
+                    else:
+                        status = "FALHA"
+                        res_visual = "Retornou Vazio"
+                except:
+                    status = "ERRO CÓDIGO"
+                    res_visual = "Crash"
 
-            resultados_lote.append({
-                "LOC": loc,
-                "NOTAM": notam_id,
-                "Início (B)": dt_ini,
-                "Fim (C)": dt_fim,
-                "Item D (Texto Analisado)": item_d if item_d else "-",
-                "Status": status,
-                "Parser Output": res_parser_str
-            })
+                resultados_lote.append({
+                    "LOC": loc,
+                    "NOTAM": notam_id,
+                    "Início (B)": dt_ini,
+                    "Fim (C)": dt_fim,
+                    "Item D (Texto)": item_d,
+                    "Status": status,
+                    "Resultado Parser": res_visual
+                })
 
         progress_bar.progress(100)
         status_text.success("Concluído!")
         
-        # EXIBIÇÃO VISUAL
+        # --- EXIBIÇÃO ---
         df = pd.DataFrame(resultados_lote)
         
         st.divider()
-        st.markdown("### 🕵️ Auditoria Visual")
+        st.markdown(f"### 🕵️ Análise: {len(df)} NOTAMs com Campo 'D' encontrados")
         
         # Filtros
-        col_f1, col_f2 = st.columns([2, 1])
-        with col_f1:
-            filtro_status = st.radio(
-                "Visualizar:", 
-                ["🚨 Apenas Falhas", "✅ Sucessos", "📄 Tudo"],
-                horizontal=True
-            )
+        filtro = st.radio(
+            "Filtrar Lista:", 
+            ["📜 Todos com Item D", "✅ Apenas Sucessos", "🚨 Apenas Falhas"],
+            horizontal=True
+        )
         
-        # Filtragem do DataFrame
-        if filtro_status == "🚨 Apenas Falhas":
+        if filtro == "🚨 Apenas Falhas":
             df_show = df[df['Status'].isin(["FALHA", "ERRO CÓDIGO"])]
-            msg_qtd = f"{len(df_show)} falhas encontradas."
-            tipo_msg = st.error
-        elif filtro_status == "✅ Sucessos":
+            st.error(f"{len(df_show)} casos onde o robô não entendeu o texto.")
+        elif filtro == "✅ Apenas Sucessos":
             df_show = df[df['Status'] == "SUCESSO"]
-            msg_qtd = f"{len(df_show)} sucessos."
-            tipo_msg = st.success
+            st.success(f"{len(df_show)} casos interpretados com sucesso.")
         else:
             df_show = df
-            msg_qtd = f"{len(df_show)} registros totais."
-            tipo_msg = st.info
-
-        tipo_msg(msg_qtd)
-
-        # Remove duplicatas de texto para facilitar leitura (apenas na view)
-        if filtro_status == "🚨 Apenas Falhas" and not df_show.empty:
-             if st.checkbox("Agrupar falhas idênticas (Remover Duplicatas)", value=True):
-                 df_show = df_show.drop_duplicates(subset=['Item D (Texto Analisado)'])
+            st.info(f"Listando todos os {len(df_show)} NOTAMs que possuem restrição de horário.")
 
         # Tabela Rica
         st.dataframe(
             df_show,
             use_container_width=True,
             column_config={
-                "Item D (Texto Analisado)": st.column_config.TextColumn("Item D", width="large"),
+                "Item D (Texto)": st.column_config.TextColumn("Texto Original (D)", width="large"),
+                "Resultado Parser": st.column_config.TextColumn("O que o Robô Entendeu", width="medium"),
                 "Status": st.column_config.TextColumn("Status", width="small"),
-                "Início (B)": st.column_config.TextColumn("Início", width="medium"),
-                "Fim (C)": st.column_config.TextColumn("Fim", width="medium"),
+                "Início (B)": st.column_config.TextColumn("Vigência Ini", width="small"),
+                "Fim (C)": st.column_config.TextColumn("Vigência Fim", width="small"),
             },
             height=600
+        )
+        
+        # Botão Download
+        csv = df_show.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "📥 Baixar Lista para Excel (CSV)",
+            data=csv,
+            file_name="analise_item_d.csv",
+            mime="text/csv"
         )
