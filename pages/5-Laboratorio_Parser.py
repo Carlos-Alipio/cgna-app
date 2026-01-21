@@ -56,21 +56,22 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: TESTE EM LOTE (AUDITORIA)
+# ABA 2: TESTE EM LOTE (AUDITORIA REAL)
 # ==============================================================================
 with tab_lote:
     st.subheader("🤖 Auditoria de Parser (Brasil)")
     
     col_conf1, col_conf2 = st.columns([3, 1])
     with col_conf1:
-        brasil_todo = st.checkbox("🌍 Analisar BRASIL INTEIRO (Todas as FIRs)", value=True)
+        brasil_todo = st.checkbox("🌍 Analisar BRASIL INTEIRO (5 FIRs)", value=True)
         if not brasil_todo:
             icaos_teste = st.text_input("Filtrar Localidades:", value="SBGR, SBGL, SBSP, SBBR")
     with col_conf2:
         st.write("")
         btn_iniciar = st.button("🚀 Iniciar Auditoria", type="primary")
 
-    API_URL = "https://aisweb.decea.mil.br/api/"
+    # Credenciais e URL
+    API_URL = "http://aisweb.decea.mil.br/api/" # Ajustado conforme seu snippet
     API_KEY = "1279934730"
     API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
 
@@ -78,47 +79,69 @@ with tab_lote:
         status_text = st.empty()
         progress_bar = st.progress(0)
         
-        lista_urls = []
+        # Define os códigos de consulta
         if brasil_todo:
-            firs = ['SBBS', 'SBCW', 'SBRE', 'SBAZ', 'SBAO']
-            for fir in firs:
-                lista_urls.append(f"{API_URL}?apiKey={API_KEY}&apiPass={API_PASS}&area=notam&fir={fir}")
+            # As 5 FIRs do Brasil via icaocode
+            icaos_consulta = "SBAZ,SBBS,SBCW,SBRE,SBAO"
+            msg_busca = "Baixando dados completos das 5 FIRs (Isso pode levar alguns segundos)..."
         else:
-            locais = icaos_teste.replace(" ", "")
-            lista_urls.append(f"{API_URL}?apiKey={API_KEY}&apiPass={API_PASS}&area=notam&icaocode={locais}")
+            icaos_consulta = icaos_teste.replace(" ", "")
+            msg_busca = f"Baixando dados de: {icaos_consulta}..."
+
+        status_text.info(f"📡 {msg_busca}")
         
         todos_items_xml = []
         
-        # 1. DOWNLOAD
-        for idx, url in enumerate(lista_urls):
-            status_text.info(f"Baixando dados... ({idx+1}/{len(lista_urls)})")
-            try:
-                r = requests.get(url, timeout=30)
-                if r.status_code == 200:
-                    root = ET.fromstring(r.content)
-                    todos_items_xml.extend(root.findall("notam"))
-            except: pass
+        try:
+            # Chamada Única e Robusta
+            params = {
+                'apiKey': API_KEY, 
+                'apiPass': API_PASS, 
+                'area': 'notam', 
+                'icaocode': icaos_consulta
+            }
+            
+            # Timeout de 60s para garantir o download das FIRs
+            response = requests.get(API_URL, params=params, timeout=60)
+            
+            if response.status_code == 200:
+                try:
+                    root = ET.fromstring(response.content)
+                    todos_items_xml = root.findall("notam")
+                except ET.ParseError:
+                    st.error("Erro ao processar o XML retornado (arquivo corrompido ou incompleto).")
+                    st.stop()
+            else:
+                st.error(f"Erro na API DECEA: {response.status_code}")
+                st.stop()
+                
+        except Exception as e:
+            st.error(f"Erro de conexão: {e}")
+            st.stop()
 
         total_items = len(todos_items_xml)
         if total_items == 0:
             st.warning("Nenhum dado encontrado.")
             st.stop()
 
-        status_text.info(f"Analisando {total_items} NOTAMs...")
+        status_text.info(f"Processando {total_items} NOTAMs...")
         resultados_lote = []
 
+        # Helper Data API (YYYY-MM-DD HH:MM:SS -> YYMMDDHHMM)
         def fmt_api_date(d_str):
             if not d_str: return "2501010000"
             try: return datetime.strptime(d_str, "%Y-%m-%d %H:%M:%S").strftime("%y%m%d%H%M")
             except: return "2501010000"
 
+        # Helper Extração Segura XML
         def safe_get(item, tag):
             f = item.find(tag)
             return f.text if f is not None and f.text else ""
 
-        # 2. ANÁLISE
+        # LOOP DE ANÁLISE
         for i, item in enumerate(todos_items_xml):
-            if i % (total_items // 20 + 1) == 0: progress_bar.progress((i + 1) / total_items)
+            if i % (total_items // 20 + 1) == 0: 
+                progress_bar.progress((i + 1) / total_items)
             
             notam_id = safe_get(item, "notam_id")
             loc = safe_get(item, "loc")
@@ -126,7 +149,7 @@ with tab_lote:
             dt_fim = safe_get(item, "dt_fim")
             texto = safe_get(item, "texto")
             
-            # Extrai Item D
+            # Extrai Item D (Regex procura D) até E) ou fim)
             match_d = re.search(r'(?:^|\s)D\)\s*(.*?)(?=\s*[E-G]\)|\s*$)', texto, re.DOTALL)
             item_d = match_d.group(1).strip() if match_d else None
             
@@ -143,8 +166,7 @@ with tab_lote:
                         )
                         if res:
                             status = "SUCESSO"
-                            # Mostra resumo do que foi entendido (Qtd dias)
-                            res_parser_str = f"{len(res)} dias calculados"
+                            res_parser_str = f"{len(res)} dias gerados"
                         else:
                             status = "FALHA"
                     except:
@@ -165,35 +187,48 @@ with tab_lote:
         progress_bar.progress(100)
         status_text.success("Concluído!")
         
-        # 3. EXIBIÇÃO VISUAL
+        # EXIBIÇÃO VISUAL
         df = pd.DataFrame(resultados_lote)
         
         st.divider()
         st.markdown("### 🕵️ Auditoria Visual")
         
         # Filtros
-        filtro_status = st.radio(
-            "O que você quer ver?", 
-            ["🚨 Apenas Falhas", "✅ Sucessos", "📄 Tudo"],
-            horizontal=True
-        )
+        col_f1, col_f2 = st.columns([2, 1])
+        with col_f1:
+            filtro_status = st.radio(
+                "Visualizar:", 
+                ["🚨 Apenas Falhas", "✅ Sucessos", "📄 Tudo"],
+                horizontal=True
+            )
         
+        # Filtragem do DataFrame
         if filtro_status == "🚨 Apenas Falhas":
             df_show = df[df['Status'].isin(["FALHA", "ERRO CÓDIGO"])]
-            st.error(f"Mostrando {len(df_show)} falhas de interpretação.")
+            msg_qtd = f"{len(df_show)} falhas encontradas."
+            tipo_msg = st.error
         elif filtro_status == "✅ Sucessos":
             df_show = df[df['Status'] == "SUCESSO"]
-            st.success(f"Mostrando {len(df_show)} NOTAMs interpretados corretamente.")
+            msg_qtd = f"{len(df_show)} sucessos."
+            tipo_msg = st.success
         else:
             df_show = df
-            st.info(f"Mostrando todos os {len(df_show)} registros.")
+            msg_qtd = f"{len(df_show)} registros totais."
+            tipo_msg = st.info
+
+        tipo_msg(msg_qtd)
+
+        # Remove duplicatas de texto para facilitar leitura (apenas na view)
+        if filtro_status == "🚨 Apenas Falhas" and not df_show.empty:
+             if st.checkbox("Agrupar falhas idênticas (Remover Duplicatas)", value=True):
+                 df_show = df_show.drop_duplicates(subset=['Item D (Texto Analisado)'])
 
         # Tabela Rica
         st.dataframe(
             df_show,
             use_container_width=True,
             column_config={
-                "Item D (Texto Analisado)": st.column_config.TextColumn("Item D (Texto)", width="large"),
+                "Item D (Texto Analisado)": st.column_config.TextColumn("Item D", width="large"),
                 "Status": st.column_config.TextColumn("Status", width="small"),
                 "Início (B)": st.column_config.TextColumn("Início", width="medium"),
                 "Fim (C)": st.column_config.TextColumn("Fim", width="medium"),
