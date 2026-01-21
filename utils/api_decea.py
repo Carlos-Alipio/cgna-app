@@ -14,7 +14,7 @@ def buscar_firs_brasil():
     Isso traz TODOS os NOTAMs do espaço aéreo brasileiro.
     """
     # FIRs: Amazônica, Brasília, Curitiba, Recife, Atlântico
-    firs = "SBAZ,SBBS,SBCW,SBRE,SBQV"
+    firs = "SBAZ,SBBS,SBCW,SBRE,SBAO"
     
     headers = {'Content-Type': 'application/xml'}
     params = {
