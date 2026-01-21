@@ -64,7 +64,7 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: TESTE EM LOTE (API REAL - CORRIGIDA)
+# ABA 2: TESTE EM LOTE (API REAL - CORRIGIDO FIRs)
 # ==============================================================================
 with tab_lote:
     st.subheader("🤖 Varredura Automática de Erros (Brasil)")
@@ -82,7 +82,8 @@ with tab_lote:
                 value="SBGR, SBGL, SBSP, SBBR, SBRJ, SBCF"
             )
         else:
-            st.info("Será feita uma varredura nas 5 FIRs do Brasil (SBBS, SBWJ, SBRE, SBAZ, SBAO).")
+            # CORRIGIDO AQUI: SBCW em vez de SBWJ
+            st.info("Será feita uma varredura nas 5 FIRs do Brasil (SBBS, SBCW, SBRE, SBAZ, SBAO).")
     
     with col_conf2:
         st.write("") 
@@ -101,8 +102,8 @@ with tab_lote:
         lista_urls = []
         
         if brasil_todo:
-            # Lista das 5 FIRs brasileiras para garantir cobertura total
-            firs = ['SBBS', 'SBWJ', 'SBRE', 'SBAZ', 'SBAO']
+            # CORRIGIDO: SBCW (Curitiba) no lugar de SBWJ
+            firs = ['SBBS', 'SBCW', 'SBRE', 'SBAZ', 'SBAO']
             for fir in firs:
                 lista_urls.append(f"{API_URL}?apiKey={API_KEY}&apiPass={API_PASS}&area=notam&fir={fir}")
         else:
