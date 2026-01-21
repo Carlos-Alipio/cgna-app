@@ -4,13 +4,14 @@ from datetime import datetime, timedelta
 # --- CONFIGURAÇÕES ---
 MAX_DAYS_PROJECT = 365 
 
-# Dicionários de Tradução
+# Dicionário de Meses
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
     "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
 }
 
+# Dicionário de Dias da Semana
 WEEK_MAP = {
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
@@ -202,33 +203,35 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     dt_b = parse_notam_date(item_b_raw)
     if not dt_b: return []
 
-    # 2. PROCESSA DATA C (LÓGICA PERM CORRIGIDA)
-    # Primeiro verifica explicitamente a string crua
-    is_perm = False
-    if item_c_raw and "PERM" in str(item_c_raw).upper():
-        is_perm = True
-        dt_c = dt_b + timedelta(days=180) # Regra: 180 dias se PERM explícito
-    else:
-        # Se não é PERM escrito, tenta parsear a data
-        dt_c = parse_notam_date(item_c_raw)
+    # 2. PROCESSA DATA C
+    # Verifica PERM explícito na string crua
+    is_perm_raw = item_c_raw and "PERM" in str(item_c_raw).upper()
+    dt_c = parse_notam_date(item_c_raw)
     
-    # Se falhou parse e não era PERM explícito (ex: None ou vazio), pode ser erro de dados
-    if not dt_c:
-        # Se veio vazio, assume fim da projeção? Não, isso seria perigoso.
-        # Mas para evitar crash, vamos assumir +1 dia ou tratar como erro.
-        # Se for vazio mesmo, retornamos vazio para segurança.
-        return []
+    # 3. VERIFICAÇÃO DE PERMANÊNCIA POR CONTEXTO (Heurística Segura)
+    # Se o texto menciona AIP, REF ou PERM, e a data é curta, considera permanente
+    text_upper = str(item_d_text).upper() if item_d_text else ""
+    is_perm_context = ("PERM" in text_upper or "REF AIP" in text_upper or "REF: AIP" in text_upper or "AD 2" in text_upper)
+    
+    # Se for PERM explícito no campo C
+    if is_perm_raw or not dt_c:
+        dt_c = dt_b + timedelta(days=180)
+    
+    # OU Se for PERM por contexto no texto D (Resolve o caso SBRP F8401/25)
+    elif is_perm_context and dt_c:
+        # Se a duração for menor que 180 dias, estende
+        if (dt_c - dt_b).days < 180:
+            dt_c = dt_b + timedelta(days=180)
 
-    # 3. VERIFICA ITEM D VAZIO (ATIVIDADE CONTÍNUA)
+    # 4. VERIFICA ITEM D VAZIO (ATIVIDADE CONTÍNUA)
     if not item_d_text or not str(item_d_text).strip():
-        # Retorna slot único do inicio até o fim (seja data fixa ou data PERM calculada acima)
         return [{'inicio': dt_b, 'fim': dt_c}]
 
-    # 4. TRAVA DE SEGURANÇA
+    # 5. TRAVA DE SEGURANÇA
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
-    # 5. PARSER NORMAL
+    # 6. PARSER NORMAL
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = RE_BARRA_DATA.sub(r'\1', text)
