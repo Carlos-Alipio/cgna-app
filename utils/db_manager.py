@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from sqlalchemy import text
+from datetime import datetime, timedelta
 
 # --- CONEXÃO CENTRALIZADA ---
 def get_connection():
@@ -9,6 +10,40 @@ def get_connection():
 # --- GERENCIAMENTO DE NOTAMS ---
 def salvar_notams(df):
     conn = get_connection()
+    
+    # ==============================================================================
+    # 🛠️ HOOK DE CORREÇÃO: REGRA PERM (B + 365 DIAS)
+    # ==============================================================================
+    try:
+        # Garante datetime para cálculos
+        df['b_dt'] = pd.to_datetime(df['b'], errors='coerce')
+        
+        def corrigir_data_fim(row):
+            # Pega valor bruto do campo C e data de início B
+            data_c_raw = str(row.get('c', '')).upper()
+            dt_inicio = row['b_dt']
+            
+            if pd.isna(dt_inicio):
+                return row['c'] 
+            
+            # REGRA ÚNICA: Se tiver "PERM" no campo C -> Início + 365 dias
+            if "PERM" in data_c_raw:
+                return dt_inicio + timedelta(days=365)
+            
+            # Caso contrário, mantém o original
+            return row['c']
+
+        if set(['b', 'c']).issubset(df.columns):
+            df['c'] = df.apply(corrigir_data_fim, axis=1)
+        
+        if 'b_dt' in df.columns:
+            df = df.drop(columns=['b_dt'])
+            
+    except Exception as e:
+        print(f"Aviso: Erro na correção PERM: {e}")
+    
+    # ==============================================================================
+
     try:
         with conn.session as s:
             with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
@@ -67,30 +102,19 @@ def remover_icao(icao):
     except:
         return False
 
-# --- GERENCIAMENTO DE FILTROS CRÍTICOS (AS NOVAS FUNÇÕES) ---
-
+# --- GERENCIAMENTO DE FILTROS CRÍTICOS ---
 def carregar_filtros_configurados():
-    """Retorna um DataFrame com todos os filtros salvos"""
     conn = get_connection()
     try:
         return conn.query("SELECT * FROM config_filtros", ttl=0)
     except:
-        # Se a tabela não existir ou estiver vazia, retorna estrutura vazia
         return pd.DataFrame(columns=['tipo', 'valor'])
 
 def atualizar_filtros_lote(tipo, lista_valores):
-    """
-    Apaga os filtros antigos desse tipo e insere os novos.
-    tipo: 'assunto' ou 'condicao'
-    lista_valores: lista de strings selecionadas
-    """
     conn = get_connection()
     try:
         with conn.session as s:
-            # 1. Limpa os filtros anteriores desse tipo
             s.execute(text("DELETE FROM config_filtros WHERE tipo = :t"), params={"t": tipo})
-            
-            # 2. Insere os novos (se houver)
             if lista_valores:
                 dados = [{"t": tipo, "v": v} for v in lista_valores]
                 s.execute(

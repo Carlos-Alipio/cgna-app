@@ -4,14 +4,12 @@ from datetime import datetime, timedelta
 # --- CONFIGURAÇÕES ---
 MAX_DAYS_PROJECT = 365 
 
-# Dicionário de Meses
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
     "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
 }
 
-# Dicionário de Dias da Semana
 WEEK_MAP = {
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
@@ -23,7 +21,6 @@ days_pattern = '|'.join(WEEK_MAP.keys())
 RE_HORARIO_SEGMENT = re.compile(r'(\d{4}-\d{4}|SR-SS|SR-\d{4}|\d{4}-SS)')
 RE_BARRA_DATA = re.compile(r'(\d{1,2})/\d{1,2}')
 RE_BARRA_DIA = re.compile(r'(' + days_pattern + r')/(' + days_pattern + r')')
-
 RE_WEEK_RANGE = re.compile(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b')
 RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2})')
 RE_NUM_RANGE = re.compile(r'(\d{1,2})\s+TIL\s+(\d{1,2})')
@@ -33,9 +30,8 @@ RE_NUM = re.compile(r'\b(\d{1,2})\b')
 def parse_notam_date(date_str):
     try:
         if not date_str: return None
-        # Se contiver PERM, retorna None aqui para ser tratado na função mestre
+        # Se contiver PERM, retorna None (para cálculo externo ou fallback)
         if "PERM" in str(date_str).upper(): return None
-        
         clean_str = str(date_str).replace("-", "").replace(":", "").replace(" ", "").strip()
         if len(clean_str) != 10: return None
         return datetime.strptime(clean_str, "%y%m%d%H%M")
@@ -56,7 +52,6 @@ def extrair_horarios(texto_horario, base_date):
         if "-" not in parte: continue
         try:
             inicio_str, fim_str = parte.split("-")
-            
             if "SR" in inicio_str: dt_ini = sr_dt
             elif "SS" in inicio_str: dt_ini = ss_dt
             elif len(inicio_str) == 4 and inicio_str.isdigit():
@@ -134,15 +129,12 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         for m in RE_FULL_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'FULL_RANGE', m.groups()))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
-
         for m in RE_NUM_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'PART_RANGE', m.groups()))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
-
         for m in RE_MONTH.finditer(segmento_limpo):
             eventos.append((m.start(), 'MONTH', m.group(1)))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
-
         for m in RE_NUM.finditer(segmento_limpo):
             eventos.append((m.start(), 'NUM', m.group(1)))
 
@@ -208,76 +200,71 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     is_perm_raw = item_c_raw and "PERM" in str(item_c_raw).upper()
     dt_c = parse_notam_date(item_c_raw)
     
-    # 3. VERIFICAÇÃO DE PERMANÊNCIA POR CONTEXTO (Heurística Segura)
-    # Se o texto menciona AIP, REF ou PERM, e a data é curta, considera permanente
-    text_upper = str(item_d_text).upper() if item_d_text else ""
-    is_perm_context = ("PERM" in text_upper or "REF AIP" in text_upper or "REF: AIP" in text_upper or "AD 2" in text_upper)
-    
-    # Se for PERM explícito no campo C
+    # REGRA SIMPLIFICADA: Se PERM no campo C (Raw) ou dt_c veio vazio -> +365 dias
     if is_perm_raw or not dt_c:
-        dt_c = dt_b + timedelta(days=180)
-    
-    # OU Se for PERM por contexto no texto D (Resolve o caso SBRP F8401/25)
-    elif is_perm_context and dt_c:
-        # Se a duração for menor que 180 dias, estende
-        if (dt_c - dt_b).days < 180:
-            dt_c = dt_b + timedelta(days=180)
+        dt_c = dt_b + timedelta(days=365)
 
-    # 4. VERIFICA ITEM D VAZIO (ATIVIDADE CONTÍNUA)
+    # 3. ATIVIDADE CONTÍNUA (D Vazio)
     if not item_d_text or not str(item_d_text).strip():
         return [{'inicio': dt_b, 'fim': dt_c}]
 
-    # 5. TRAVA DE SEGURANÇA
+    # 4. TRAVA DE SEGURANÇA
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
-    # 6. PARSER NORMAL
+    # 5. PARSER NORMAL
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = RE_BARRA_DATA.sub(r'\1', text)
     text = RE_BARRA_DIA.sub(r'\1', text)
     text = text.replace(u'\xa0', u' ')
 
+    res = []
     if RE_HORARIO_SEGMENT.search(text):
         res = processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao)
-        if res: return res
+    
+    if not res:
+        if "DLY" in text or "DAILY" in text:
+            horarios_str = text.replace("DLY", "").replace("DAILY", "").strip()
+            dias_exc = set()
+            if "EXC" in horarios_str:
+                parts = horarios_str.split("EXC")
+                horarios_str = parts[0].strip()
+                exc_text = parts[1].strip()
+                for k, v in WEEK_MAP.items():
+                    if k in exc_text: dias_exc.add(v)
+            res = gerar_dias_entre(dt_b, dt_c, dias_exc, horarios_str)
+    
+    if not res:
+        m_week = re.search(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b', text)
+        if m_week:
+            s_idx = WEEK_MAP[m_week.group(1)]
+            e_idx = WEEK_MAP[m_week.group(2)]
+            validos = set(range(s_idx, e_idx + 1)) if s_idx <= e_idx else set(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
+            horario = text.replace(m_week.group(0), "").strip()
+            temp_res = []
+            curr = dt_b
+            while curr <= dt_c:
+                if curr.weekday() in validos:
+                    temp_res.extend(extrair_horarios(horario, curr))
+                curr += timedelta(days=1)
+            res = temp_res
 
-    # FALLBACKS
-    if "DLY" in text or "DAILY" in text:
-        horarios_str = text.replace("DLY", "").replace("DAILY", "").strip()
-        dias_exc = set()
-        if "EXC" in horarios_str:
-            parts = horarios_str.split("EXC")
-            horarios_str = parts[0].strip()
-            exc_text = parts[1].strip()
-            for k, v in WEEK_MAP.items():
-                if k in exc_text: dias_exc.add(v)
-        return gerar_dias_entre(dt_b, dt_c, dias_exc, horarios_str)
+    if not res:
+        if any(d in text for d in WEEK_MAP):
+            alvo = {WEEK_MAP[d] for d in WEEK_MAP if d in text}
+            horario = text
+            for d in WEEK_MAP: horario = horario.replace(d, "")
+            temp_res = []
+            curr = dt_b
+            while curr <= dt_c:
+                if curr.weekday() in alvo:
+                    temp_res.extend(extrair_horarios(horario, curr))
+                curr += timedelta(days=1)
+            res = temp_res
+            
+    # 7. FALLBACK FINAL (H24 PARA TEXTO DESCRITIVO)
+    if not res:
+         return [{'inicio': dt_b, 'fim': dt_c}]
 
-    m_week = re.search(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b', text)
-    if m_week:
-        s_idx = WEEK_MAP[m_week.group(1)]
-        e_idx = WEEK_MAP[m_week.group(2)]
-        validos = set(range(s_idx, e_idx + 1)) if s_idx <= e_idx else set(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
-        horario = text.replace(m_week.group(0), "").strip()
-        res_week = []
-        curr = dt_b
-        while curr <= dt_c:
-            if curr.weekday() in validos:
-                res_week.extend(extrair_horarios(horario, curr))
-            curr += timedelta(days=1)
-        return res_week
-
-    if any(d in text for d in WEEK_MAP):
-        alvo = {WEEK_MAP[d] for d in WEEK_MAP if d in text}
-        horario = text
-        for d in WEEK_MAP: horario = horario.replace(d, "")
-        res_days = []
-        curr = dt_b
-        while curr <= dt_c:
-            if curr.weekday() in alvo:
-                res_days.extend(extrair_horarios(horario, curr))
-            curr += timedelta(days=1)
-        return res_days
-
-    return []
+    return res

@@ -9,49 +9,43 @@ st.markdown("Ferramenta para validação do algoritmo usando dados reais do **Ba
 
 tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
 
-# ==============================================================================
-# ABA 1: TESTE MANUAL
-# ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
     with c1:
         st.subheader("1. Contexto")
         dt_hoje = datetime.now()
         dt_b = st.date_input("Início (Item B)", value=dt_hoje)
-        # Campo aberto para testar PERM
-        str_c_manual = st.text_input("Fim (Item C)", value=(dt_hoje + timedelta(days=30)).strftime("%y%m%d")+"2359", help="Digite uma data YYMMDDHHMM ou 'PERM'")
+        str_c_manual = st.text_input("Fim (Item C)", value=(dt_hoje + timedelta(days=365)).strftime("%y%m%d")+"2359", help="Digite data YYMMDDHHMM ou 'PERM'")
         str_b = dt_b.strftime("%y%m%d") + "0000"
         
     with c2:
         st.subheader("2. Texto (Item D)")
         exemplos = {
+            "PERM (REF AIP)": "RWY 18/36 CLSD REF: AIP AD 2.12",
             "Padrão Diário": "DLY 0600-1200",
             "Dias da Semana": "MON TIL FRI 1000/1600",
             "Exceção Fim de Semana": "DLY 0800-1700 EXC SAT SUN",
-            "Livre para digitar": ""
         }
         escolha = st.selectbox("Modelos:", list(exemplos.keys()))
-        texto_padrao = exemplos[escolha] if escolha != "Livre para digitar" else ""
+        texto_padrao = exemplos[escolha]
         item_d_input = st.text_area("Digite o Item D:", value=texto_padrao, height=100)
 
     if st.button("🔬 Analisar Manualmente", type="primary"):
-        # Permite Item D vazio para testar PERM continuo
         try:
-            res = parser_notam.interpretar_periodo_atividade(item_d_input, "SBGR", str_b, str_c_manual)
+            res = parser_notam.interpretar_periodo_atividade(item_d_input, "TESTE", str_b, str_c_manual)
             if not res:
-                st.warning("⚠️ Retorno vazio (pode ser erro ou fora da vigência).")
+                st.warning("⚠️ Retorno vazio.")
             else:
                 df_res = pd.DataFrame(res)
                 df_res['Dia'] = df_res['inicio'].dt.strftime('%d/%m/%Y (%a)')
                 df_res['Hora'] = df_res['inicio'].dt.strftime('%H:%M') + " - " + df_res['fim'].dt.strftime('%H:%M')
                 st.success(f"✅ Identificados {len(df_res)} períodos.")
+                dt_final_calc = res[-1]['fim']
+                st.info(f"📅 Data Final Calculada: {dt_final_calc.strftime('%d/%m/%Y %H:%M')}")
                 st.dataframe(df_res[['Dia', 'Hora']], use_container_width=True)
         except Exception as e:
             st.error(f"Erro: {e}")
 
-# ==============================================================================
-# ABA 2: AUDITORIA DO BANCO DE DADOS
-# ==============================================================================
 with tab_banco:
     st.subheader("🕵️ Auditoria: Supabase")
     
@@ -68,7 +62,6 @@ with tab_banco:
                 st.error("Coluna 'd' não encontrada.")
                 st.stop()
 
-            # Mantém linhas para análise
             df_analise = df_full.copy()
             df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
 
@@ -76,16 +69,12 @@ with tab_banco:
             progress_bar = st.progress(0)
             resultados = []
 
-            # Função auxiliar apenas para formatação visual inicial da tabela
-            def format_date_visual(val):
-                s = str(val).strip()
-                if "PERM" in s.upper(): return "PERM"
-                try:
-                     clean = s.replace("-", "").replace(":", "").replace(" ", "")
-                     if len(clean) == 10: return datetime.strptime(clean, "%y%m%d%H%M")
-                     if isinstance(val, (datetime, pd.Timestamp)): return val
-                except: pass
-                return s
+            def basic_parse(val):
+                s = str(val).strip().upper()
+                clean = s.replace("-", "").replace(":", "").replace(" ", "")
+                if len(clean) == 10 and clean.isdigit(): return datetime.strptime(clean, "%y%m%d%H%M")
+                if isinstance(val, (datetime, pd.Timestamp)): return val
+                return None
 
             for idx, row in enumerate(df_analise.iterrows()):
                 r = row[1]
@@ -93,30 +82,37 @@ with tab_banco:
                 
                 item_d = str(r[col_d]).strip()
                 if item_d.lower() == 'nan': item_d = ""
-                
                 loc = r.get('loc', 'SB??')
                 n_notam = r.get('n', '?')
                 
-                # Pega valores CRUS do banco
                 raw_b = r.get('b', '')
-                raw_c = r.get('c', '') # Passa o valor cru (que pode ter PERM)
+                raw_c = r.get('c', '')
+
+                dt_b_obj = basic_parse(raw_b)
+                if not dt_b_obj: dt_b_obj = datetime.now()
+                
+                dt_c_obj = basic_parse(raw_c)
+
+                # CORREÇÃO NA LEITURA (SIMULAÇÃO): SE PERM EM C -> 365 DIAS
+                is_perm_raw = "PERM" in str(raw_c).upper()
+                
+                dt_c_final = dt_c_obj
+                if is_perm_raw:
+                    dt_c_final = dt_b_obj + timedelta(days=365)
+
+                str_b_parser = dt_b_obj.strftime("%y%m%d%H%M")
+                str_c_parser = dt_c_final.strftime("%y%m%d%H%M") if dt_c_final else None
                 
                 status = "N/A"
                 detalhe = "-"
-                view_c = format_date_visual(raw_c) # Visual original
-                view_b = format_date_visual(raw_b)
                 
                 try:
-                    # Chama o parser com o valor cru de C
-                    res = parser_notam.interpretar_periodo_atividade(item_d, loc, raw_b, raw_c)
+                    res = parser_notam.interpretar_periodo_atividade(item_d, loc, str_b_parser, str_c_parser)
                     if res:
                         status = "SUCESSO"
                         dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
                         if len(res) > 3: dias_str += "..."
                         detalhe = f"{len(res)} dias ({dias_str})"
-                        
-                        # Se funcionou, atualiza a visualização do Fim C para refletir o cálculo real
-                        view_c = res[-1]['fim'] 
                     else:
                         status = "FALHA"
                         detalhe = "Retorno Vazio []"
@@ -128,8 +124,8 @@ with tab_banco:
                     "LOC": loc,
                     "NOTAM": n_notam,
                     "Item D": item_d,
-                    "Início (B)": view_b,
-                    "Fim (C)": view_c,
+                    "Início (B)": dt_b_obj,
+                    "Fim (C)": dt_c_final,
                     "Status": status,
                     "Detalhe": detalhe
                 })
@@ -164,7 +160,7 @@ with tab_banco:
                 "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
                 "Detalhe": st.column_config.TextColumn("Resultado do Robô", width="medium"),
                 "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
-                "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim (Real)", format="DD/MM/YYYY HH:mm"),
+                "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim (C)", format="DD/MM/YYYY HH:mm"),
             },
             height=600
         )
