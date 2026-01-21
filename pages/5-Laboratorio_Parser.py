@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 from utils import parser_notam
 
 st.set_page_config(page_title="Lab Parser Item D", layout="wide")
-st.title("🛠️ Laboratório de Testes: Parser NOTAM")
-st.markdown("Ferramenta para validação e auditoria visual do algoritmo de interpretação.")
+st.title("🛠️ Laboratório: Diagnóstico de Dados")
+st.markdown("Use esta tela para descobrir por que o Item D não está sendo encontrado.")
 
-tab_manual, tab_lote = st.tabs(["🧪 Teste Manual", "📦 Auditoria em Lote (API)"])
+tab_manual, tab_lote = st.tabs(["🧪 Teste Manual", "📦 Auditoria em Lote (Debug)"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL
+# ABA 1: TESTE MANUAL (MANTIDA IGUAL)
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -56,19 +56,21 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: TESTE EM LOTE (AUDITORIA REAL)
+# ABA 2: DIAGNÓSTICO EM LOTE
 # ==============================================================================
 with tab_lote:
-    st.subheader("🤖 Auditoria de Parser (Brasil)")
-    
+    st.subheader("🕵️ Espião de XML (Debug)")
+    st.info("Esta ferramenta vai mostrar o texto cru que vem da API para entendermos o erro.")
+
     col_conf1, col_conf2 = st.columns([3, 1])
     with col_conf1:
-        brasil_todo = st.checkbox("🌍 Analisar BRASIL INTEIRO (5 FIRs)", value=True)
+        # Padrão: Buscar Brasil Todo para pegar massa de dados
+        brasil_todo = st.checkbox("Analisa Brasil Todo (5 FIRs)", value=True)
         if not brasil_todo:
-            icaos_teste = st.text_input("Filtrar Localidades:", value="SBGR, SBGL, SBSP, SBBR")
+            icaos_teste = st.text_input("Filtrar Localidades:", value="SBGR, SBGL, SBSP")
     with col_conf2:
         st.write("")
-        btn_iniciar = st.button("🚀 Iniciar Auditoria", type="primary")
+        btn_iniciar = st.button("🚀 Iniciar Diagnóstico", type="primary")
 
     API_URL = "http://aisweb.decea.mil.br/api/"
     API_KEY = "1279934730"
@@ -76,17 +78,14 @@ with tab_lote:
 
     if btn_iniciar:
         status_text = st.empty()
-        progress_bar = st.progress(0)
         
-        # --- BUSCA ---
+        # --- 1. BUSCA ---
         if brasil_todo:
             icaos_consulta = "SBAZ,SBBS,SBCW,SBRE,SBAO"
-            msg_busca = "Baixando dados completos das 5 FIRs..."
         else:
             icaos_consulta = icaos_teste.replace(" ", "")
-            msg_busca = f"Baixando dados de: {icaos_consulta}..."
 
-        status_text.info(f"📡 {msg_busca}")
+        status_text.info(f"📡 Baixando dados...")
         todos_items_xml = []
         
         try:
@@ -109,115 +108,82 @@ with tab_lote:
             st.stop()
 
         total_items = len(todos_items_xml)
-        if total_items == 0:
-            st.warning("Nenhum dado.")
-            st.stop()
+        st.write(f"**Total de NOTAMs baixados:** {total_items}")
 
-        status_text.info(f"Processando {total_items} NOTAMs...")
+        # --- 2. ESPIONAGEM (MOSTRAR OS PRIMEIROS 5 NOTAMS COMPLETOS) ---
+        st.divider()
+        st.markdown("### 🔍 Raio-X dos 5 primeiros registros")
+        st.markdown("Veja abaixo como o texto está chegando e se a tag `<texto>` existe.")
+
+        for i in range(min(5, total_items)):
+            item = todos_items_xml[i]
+            
+            # Tenta pegar tags comuns
+            raw_text = item.find("texto").text if item.find("texto") is not None else "TAG <texto> NÃO ENCONTRADA"
+            raw_id = item.find("notam_id").text if item.find("notam_id") is not None else "?"
+            
+            with st.expander(f"NOTAM #{i+1}: {raw_id}", expanded=True):
+                st.code(raw_text, language="text")
+                
+                # Teste da Regex ao vivo
+                match_d = re.search(r'(?:^|\s|\n)D\)\s*(.+?)(?=\s*[E-G]\)|\s*$)', raw_text, re.DOTALL | re.IGNORECASE)
+                if match_d:
+                    st.success(f"✅ Regex encontrou: '{match_d.group(1).strip()}'")
+                else:
+                    st.error("❌ Regex NÃO encontrou o padrão 'D)' neste texto.")
+
+        # --- 3. PROCESSAMENTO GERAL ---
+        st.divider()
+        st.markdown("### 📊 Tentativa de Processamento em Massa")
+        
         resultados_lote = []
-
+        
         def fmt_api_date(d_str):
             if not d_str: return "2501010000"
             try: return datetime.strptime(d_str, "%Y-%m-%d %H:%M:%S").strftime("%y%m%d%H%M")
             except: return "2501010000"
 
-        def safe_get(item, tag):
-            f = item.find(tag)
-            return f.text if f is not None and f.text else ""
-
-        # --- LOOP ANÁLISE ---
-        count_com_item_d = 0
-        
-        for i, item in enumerate(todos_items_xml):
-            if i % (total_items // 20 + 1) == 0: progress_bar.progress((i + 1) / total_items)
+        for item in todos_items_xml:
+            # Extração Segura
+            texto = item.find("texto").text if item.find("texto") is not None else ""
+            notam_id = item.find("notam_id").text if item.find("notam_id") is not None else "?"
+            loc = item.find("loc").text if item.find("loc") is not None else "?"
             
-            notam_id = safe_get(item, "notam_id")
-            loc = safe_get(item, "loc")
-            dt_ini = safe_get(item, "dt_ini")
-            dt_fim = safe_get(item, "dt_fim")
-            texto = safe_get(item, "texto")
-            
-            match_d = re.search(r'(?:^|\s)D\)\s*(.*?)(?=\s*[E-G]\)|\s*$)', texto, re.DOTALL)
+            # --- REGEX MELHORADA ---
+            # Procura D) no inicio da linha, ou após espaço, ou após newline
+            # Captura tudo até achar E), F), G) ou fim da string
+            match_d = re.search(r'(?:^|\s|\n)D\)\s*(.+?)(?=\s*[E-G]\)|\s*$)', texto, re.DOTALL | re.IGNORECASE)
             item_d = match_d.group(1).strip() if match_d else None
             
-            # SÓ ADICIONA NA LISTA SE TIVER ITEM D VÁLIDO (IGNORA NIL/NONE)
-            if item_d and item_d.upper() not in ["NIL", "NONE", ""]:
-                count_com_item_d += 1
-                status = "N/A"
-                res_visual = "-"
-                
-                try:
-                    res = parser_notam.interpretar_periodo_atividade(
-                        item_d, loc, fmt_api_date(dt_ini), fmt_api_date(dt_fim)
-                    )
-                    if res:
-                        status = "SUCESSO"
-                        # Cria um resumo visual: "5 dias (20/01, 21/01...)"
-                        dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
-                        if len(res) > 3: dias_str += "..."
-                        res_visual = f"{len(res)} dias ({dias_str})"
-                    else:
-                        status = "FALHA"
-                        res_visual = "Retornou Vazio"
-                except:
-                    status = "ERRO CÓDIGO"
-                    res_visual = "Crash"
+            status = "SEM ITEM D"
+            
+            if item_d:
+                if item_d.upper() in ["NIL", "NONE", ""]:
+                    status = "IGNORADO (NIL)"
+                else:
+                    # Tenta rodar o parser
+                    try:
+                        dt_ini = item.find("dt_ini").text
+                        dt_fim = item.find("dt_fim").text
+                        res = parser_notam.interpretar_periodo_atividade(
+                            item_d, loc, fmt_api_date(dt_ini), fmt_api_date(dt_fim)
+                        )
+                        status = "SUCESSO" if res else "FALHA PARSER"
+                    except:
+                        status = "ERRO CODIGO"
 
-                resultados_lote.append({
-                    "LOC": loc,
-                    "NOTAM": notam_id,
-                    "Início (B)": dt_ini,
-                    "Fim (C)": dt_fim,
-                    "Item D (Texto)": item_d,
-                    "Status": status,
-                    "Resultado Parser": res_visual
-                })
+            resultados_lote.append({
+                "NOTAM": notam_id,
+                "Texto Bruto (Início)": texto[:50] + "...",
+                "Item D Extraído": item_d if item_d else "-",
+                "Status": status
+            })
 
-        progress_bar.progress(100)
-        status_text.success("Concluído!")
-        
-        # --- EXIBIÇÃO ---
         df = pd.DataFrame(resultados_lote)
         
-        st.divider()
-        st.markdown(f"### 🕵️ Análise: {len(df)} NOTAMs com Campo 'D' encontrados")
-        
-        # Filtros
-        filtro = st.radio(
-            "Filtrar Lista:", 
-            ["📜 Todos com Item D", "✅ Apenas Sucessos", "🚨 Apenas Falhas"],
-            horizontal=True
-        )
-        
-        if filtro == "🚨 Apenas Falhas":
-            df_show = df[df['Status'].isin(["FALHA", "ERRO CÓDIGO"])]
-            st.error(f"{len(df_show)} casos onde o robô não entendeu o texto.")
-        elif filtro == "✅ Apenas Sucessos":
-            df_show = df[df['Status'] == "SUCESSO"]
-            st.success(f"{len(df_show)} casos interpretados com sucesso.")
-        else:
-            df_show = df
-            st.info(f"Listando todos os {len(df_show)} NOTAMs que possuem restrição de horário.")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Total", len(df))
+        c2.metric("Com Item D (Regex pegou)", len(df[df['Item D Extraído'] != '-']))
+        c3.metric("Sucesso Parser", len(df[df['Status'] == 'SUCESSO']))
 
-        # Tabela Rica
-        st.dataframe(
-            df_show,
-            use_container_width=True,
-            column_config={
-                "Item D (Texto)": st.column_config.TextColumn("Texto Original (D)", width="large"),
-                "Resultado Parser": st.column_config.TextColumn("O que o Robô Entendeu", width="medium"),
-                "Status": st.column_config.TextColumn("Status", width="small"),
-                "Início (B)": st.column_config.TextColumn("Vigência Ini", width="small"),
-                "Fim (C)": st.column_config.TextColumn("Vigência Fim", width="small"),
-            },
-            height=600
-        )
-        
-        # Botão Download
-        csv = df_show.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "📥 Baixar Lista para Excel (CSV)",
-            data=csv,
-            file_name="analise_item_d.csv",
-            mime="text/csv"
-        )
+        st.dataframe(df, use_container_width=True)
