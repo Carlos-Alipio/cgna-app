@@ -27,24 +27,31 @@ def gerar_cronograma_detalhado(df_criticos):
 
         slots = []
 
-        # Tenta Interpretar o Item D
+        # 1. Tenta Interpretar o Item D (Parser de Horários Complexos)
         tem_texto_d = item_d_text and item_d_text.upper() not in ['NONE', 'NAN', '']
         
         if tem_texto_d:
             slots = parser_notam.interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw)
 
-        # Fallback (Plano B)
+        # 2. Fallback (Se não achou horários no texto)
         if not slots:
             dt_ini = parser_notam.parse_notam_date(item_b_raw)
             dt_fim = parser_notam.parse_notam_date(item_c_raw)
             
             if dt_ini:
+                # Se a Data Final for Nula ou Inválida, aplicamos a regra
                 if not dt_fim: 
+                    # --- REGRA ESTRITA SOLICITADA ---
+                    # Verifica APENAS se tem "PERM" no campo C
                     if "PERM" in str(item_c_raw).upper():
-                        dt_fim = dt_ini + timedelta(days=30)
+                        dt_fim = dt_ini + timedelta(days=365) # 1 Ano
                     else:
-                        dt_fim = dt_ini + timedelta(hours=1) 
+                        dt_fim = dt_ini + timedelta(hours=1)  # 1 Hora (Padrão mínimo)
                 
+                # Correção simples caso a data final venha menor que a inicial (erro de dado)
+                elif dt_fim < dt_ini:
+                     dt_fim = dt_ini + timedelta(hours=24)
+
                 slots.append({'inicio': dt_ini, 'fim': dt_fim})
 
         # Adiciona ao Relatório Final
@@ -59,7 +66,7 @@ def gerar_cronograma_detalhado(df_criticos):
                 'Texto': item_e_text 
             })
 
-    # Gera DataFrame
+    # Gera DataFrame Final
     df_timeline = pd.DataFrame(lista_expandida)
     
     if not df_timeline.empty:
@@ -70,20 +77,12 @@ def gerar_cronograma_detalhado(df_criticos):
 def filtrar_por_turno(df_timeline, data_referencia, turno):
     """
     Filtra os NOTAMs que colidem com o horário do turno selecionado.
-    Turnos UTC:
-    - MADRUGADA: 03:00 - 15:00
-    - MANHA:     09:00 - 21:00
-    - TARDE:     15:00 - 03:00 (+1)
-    - NOITE:     21:00 - 09:00 (+1)
     """
     if df_timeline.empty:
         return pd.DataFrame(), ""
 
     # 1. Definição dos Horários do Turno (UTC)
     hora_inicio = 0
-    
-    # A string 'turno' vem do selectbox (ex: "MADRUGADA (03h-15h UTC)")
-    # Vamos verificar qual palavra chave está na string
     turno_upper = turno.upper()
     
     if 'MADRUGADA' in turno_upper: 
@@ -109,7 +108,6 @@ def filtrar_por_turno(df_timeline, data_referencia, turno):
     
     df_turno = df_timeline[mask].copy()
     
-    # Formata texto do período para exibição
     periodo_str = f"{dt_turno_inicio.strftime('%d/%m %H:%M')}z até {dt_turno_fim.strftime('%d/%m %H:%M')}z"
     
     return df_turno, periodo_str
