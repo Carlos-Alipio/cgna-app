@@ -230,3 +230,5 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         return res_days
 
     return []
+
+# ==============================================================================
