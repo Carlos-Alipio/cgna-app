@@ -3,7 +3,7 @@ import pandas as pd
 from sqlalchemy import text
 from datetime import datetime, timedelta
 
-# --- CONEXÃO ---
+# --- CONEXÃO CENTRALIZADA ---
 def get_connection():
     return st.connection("supabase", type="sql")
 
@@ -12,11 +12,10 @@ def salvar_notams(df):
     conn = get_connection()
     
     # ==============================================================================
-    # 🛠️ HOOK DE CORREÇÃO: TRATAMENTO DE 'PERM' vindo do CSV
+    # 🛠️ HOOK DE CORREÇÃO: TRATAMENTO INTELIGENTE DE DATAS E PERM
     # ==============================================================================
     try:
-        # 1. Normalização de Nomes de Colunas
-        # O CSV pode vir como "Data Inicial"/"Data Final" ou "b"/"c". Vamos padronizar.
+        # 1. Normalização de Nomes de Colunas (CSV -> Padrão Interno)
         mapa_colunas = {
             'Data Inicial': 'b',
             'Data Final': 'c',
@@ -26,50 +25,47 @@ def salvar_notams(df):
         }
         df = df.rename(columns=mapa_colunas)
 
-        # 2. Conversão da Data de Início (b)
+        # 2. Garante que a Data de Início (b) seja datetime para cálculos
         df['b_dt'] = pd.to_datetime(df['b'], errors='coerce')
         
         # 3. Função de Correção Linha a Linha
         def corrigir_data_fim(row):
-            # Pega valores brutos como string maiúscula
+            # Pega valores brutos como string maiúscula para análise
             val_c = str(row.get('c', '')).upper().strip()
             texto_d = str(row.get('d', '')).upper().strip()
             dt_inicio = row['b_dt']
             
-            # Se não tem data de início válida, retorna o que veio
+            # Se não tem data de início válida, retorna o que veio (não dá pra calcular)
             if pd.isna(dt_inicio):
                 return row.get('c')
             
-            # --- VERIFICAÇÃO DE PERM ---
-            # A. Está escrito "PERM" na coluna de Data Final?
-            is_perm_c = "PERM" in val_c
+            # --- VERIFICAÇÃO 1: "PERM" EXPLÍCITO NO CAMPO C ---
+            # (Resolve o caso do XML que você mandou)
+            tem_perm_em_c = "PERM" in val_c
             
-            # B. Está escrito REF AIP ou PERM no Texto? (Backup)
-            gatilhos = ["REF: AIP", "REF AIP", "AD 2", "PERM", "AIP AD"]
-            is_perm_text = any(g in texto_d for g in gatilhos)
+            # --- VERIFICAÇÃO 2: CONTEXTO DE INFRAESTRUTURA NO TEXTO D ---
+            # (Resolve casos onde o sistema trocou PERM por data curta de 30 dias)
+            gatilhos_texto = [
+                "REF: AIP", "REF AIP", "AD 2", "AIP AD", 
+                "PERM", "PERMANENTE", "DEFINITIVO",
+                "RESA", "AUSENCIA DE RESA", # Obras longas
+                "OBST", "OBSTACLE",         # Obstáculos são fixos
+                "INSTL", "INSTALADO"
+            ]
+            tem_perm_no_texto = any(g in texto_d for g in gatilhos_texto)
             
-            # SE FOR PERMANENTE:
-            if is_perm_c or is_perm_text:
-                # Calcula Data Início + 365 dias
-                nova_data = dt_inicio + timedelta(days=365)
-                return nova_data
+            # REGRA FINAL: Se for PERM por C ou por Texto -> Início + 365 dias
+            if tem_perm_em_c or tem_perm_no_texto:
+                return dt_inicio + timedelta(days=365)
             
-            # SE NÃO FOR PERM:
-            # Tenta aproveitar a data que veio, se for válida
-            try:
-                # Se for formato ISO ou BR, o pandas resolve depois, retornamos o valor original
-                # Mas se o valor for vazio ou inválido, precisamos cuidar
-                if len(val_c) < 6: # String muito curta, provavelmente erro
-                    return row.get('c')
-                return row.get('c')
-            except:
-                return row.get('c')
+            # SE NÃO FOR PERM: Tenta manter a data original
+            return row.get('c')
 
-        # 4. Aplica a correção
-        if 'b' in df.columns and 'c' in df.columns:
+        # 4. Aplica a correção na coluna 'c'
+        if set(['b', 'c']).issubset(df.columns):
             df['c'] = df.apply(corrigir_data_fim, axis=1)
         
-        # Remove coluna auxiliar
+        # Remove coluna auxiliar temporária
         if 'b_dt' in df.columns:
             df = df.drop(columns=['b_dt'])
 
@@ -81,13 +77,12 @@ def salvar_notams(df):
     try:
         with conn.session as s:
             with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
-                # Garante que as colunas essenciais existam antes de salvar
-                cols_banco = ['loc', 'n', 'b', 'c', 'd'] # Adicione outras se necessário
-                # Filtra apenas colunas que existem no DF para não dar erro
-                cols_salvar = [c for c in cols_banco if c in df.columns]
+                # Garante que salvamos apenas colunas úteis para não dar erro de schema
+                # (Adapte esta lista se seu banco tiver mais colunas)
+                cols_banco = ['loc', 'n', 'b', 'c', 'd', 'e', 'tp', 'status', 'cat'] 
                 
-                # Se houver outras colunas no DF (como Assunto, Condição), mantém também
-                # A estratégia 'replace' recria a tabela com as colunas do DF
+                # Filtra colunas do DF que existem na lista acima (case insensitive match se necessário)
+                # Aqui simplificado para salvar tudo que o DF tem, pois 'replace' recria a tabela
                 
                 df.to_sql(
                     'notams', 
@@ -102,7 +97,6 @@ def salvar_notams(df):
         st.error(f"Erro ao salvar no Banco: {e}")
         return False
 
-# ... (Mantenha as demais funções carregar_notams, carregar_frota, etc. inalteradas) ...
 def carregar_notams():
     conn = get_connection()
     try:
@@ -110,6 +104,25 @@ def carregar_notams():
     except:
         return pd.DataFrame()
 
+# --- FUNÇÃO DE LIMPEZA (Útil para resetar antes de carga total) ---
+def limpar_tabela_notams():
+    """Apaga todos os registros da tabela NOTAMS"""
+    conn = get_connection()
+    try:
+        with conn.session as s:
+            # Tenta TRUNCATE (mais rápido)
+            try:
+                s.execute(text("TRUNCATE TABLE notams;"))
+            except:
+                # Fallback para DELETE
+                s.execute(text("DELETE FROM notams;"))
+            s.commit()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao limpar tabela: {e}")
+        return False
+
+# --- GERENCIAMENTO DE FROTA (ICAO) ---
 def carregar_frota_monitorada():
     conn = get_connection()
     try:
@@ -122,7 +135,10 @@ def adicionar_icao(icao, desc):
     conn = get_connection()
     try:
         with conn.session as s:
-            s.execute(text("INSERT INTO frota_icao (icao, descricao) VALUES (:i, :d)"), params={"i": icao.upper().strip(), "d": desc})
+            s.execute(
+                text("INSERT INTO frota_icao (icao, descricao) VALUES (:i, :d)"),
+                params={"i": icao.upper().strip(), "d": desc}
+            )
             s.commit()
         return True
     except:
@@ -132,12 +148,16 @@ def remover_icao(icao):
     conn = get_connection()
     try:
         with conn.session as s:
-            s.execute(text("DELETE FROM frota_icao WHERE icao = :i"), params={"i": icao})
+            s.execute(
+                text("DELETE FROM frota_icao WHERE icao = :i"),
+                params={"i": icao}
+            )
             s.commit()
         return True
     except:
         return False
 
+# --- GERENCIAMENTO DE FILTROS ---
 def carregar_filtros_configurados():
     conn = get_connection()
     try:
@@ -152,7 +172,10 @@ def atualizar_filtros_lote(tipo, lista_valores):
             s.execute(text("DELETE FROM config_filtros WHERE tipo = :t"), params={"t": tipo})
             if lista_valores:
                 dados = [{"t": tipo, "v": v} for v in lista_valores]
-                s.execute(text("INSERT INTO config_filtros (tipo, valor) VALUES (:t, :v)"), dados)
+                s.execute(
+                    text("INSERT INTO config_filtros (tipo, valor) VALUES (:t, :v)"),
+                    dados
+                )
             s.commit()
         return True
     except Exception as e:
