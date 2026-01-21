@@ -2,16 +2,15 @@ import re
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
-MAX_DAYS_PROJECT = 365 # 1 Ano de projeção
+MAX_DAYS_PROJECT = 365 
 
-# Dicionário de Meses
+# Dicionários de Tradução
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
     "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
 }
 
-# Dicionário de Dias da Semana
 WEEK_MAP = {
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
@@ -32,16 +31,12 @@ RE_NUM = re.compile(r'\b(\d{1,2})\b')
 
 def parse_notam_date(date_str):
     try:
-        # Se for string "PERM" ou vazio, retorna None para tratar depois
-        if not date_str or "PERM" in str(date_str).upper():
-            return None
+        if not date_str: return None
+        # Se contiver PERM, retorna None aqui para ser tratado na função mestre
+        if "PERM" in str(date_str).upper(): return None
         
-        # Tenta limpar string
         clean_str = str(date_str).replace("-", "").replace(":", "").replace(" ", "").strip()
-        
-        if len(clean_str) != 10: 
-            return None
-            
+        if len(clean_str) != 10: return None
         return datetime.strptime(clean_str, "%y%m%d%H%M")
     except: return None
 
@@ -207,23 +202,33 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     dt_b = parse_notam_date(item_b_raw)
     if not dt_b: return []
 
-    # 2. PROCESSA DATA C (Lida com PERM)
-    dt_c = parse_notam_date(item_c_raw)
+    # 2. PROCESSA DATA C (LÓGICA PERM CORRIGIDA)
+    # Primeiro verifica explicitamente a string crua
+    is_perm = False
+    if item_c_raw and "PERM" in str(item_c_raw).upper():
+        is_perm = True
+        dt_c = dt_b + timedelta(days=180) # Regra: 180 dias se PERM explícito
+    else:
+        # Se não é PERM escrito, tenta parsear a data
+        dt_c = parse_notam_date(item_c_raw)
     
-    # Se C for None (porque era PERM ou vazio), projeta B + 365 dias
+    # Se falhou parse e não era PERM explícito (ex: None ou vazio), pode ser erro de dados
     if not dt_c:
-        dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
-    
-    # Trava de segurança para intervalos gigantes
+        # Se veio vazio, assume fim da projeção? Não, isso seria perigoso.
+        # Mas para evitar crash, vamos assumir +1 dia ou tratar como erro.
+        # Se for vazio mesmo, retornamos vazio para segurança.
+        return []
+
+    # 3. VERIFICA ITEM D VAZIO (ATIVIDADE CONTÍNUA)
+    if not item_d_text or not str(item_d_text).strip():
+        # Retorna slot único do inicio até o fim (seja data fixa ou data PERM calculada acima)
+        return [{'inicio': dt_b, 'fim': dt_c}]
+
+    # 4. TRAVA DE SEGURANÇA
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
-    # 3. VERIFICA ITEM D
-    # Se Item D estiver vazio ou nulo, é atividade CONTINUA (H24)
-    if not item_d_text or not str(item_d_text).strip():
-        return [{'inicio': dt_b, 'fim': dt_c}]
-
-    # 4. PARSER NORMAL
+    # 5. PARSER NORMAL
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = RE_BARRA_DATA.sub(r'\1', text)
