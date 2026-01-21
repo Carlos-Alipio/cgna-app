@@ -1,19 +1,16 @@
 import streamlit as st
 import pandas as pd
-import requests
-import xml.etree.ElementTree as ET
-import re
 from datetime import datetime, timedelta
-from utils import parser_notam
+from utils import parser_notam, db_manager
 
-st.set_page_config(page_title="Lab Parser & Debug", layout="wide")
-st.title("🛠️ Laboratório: Diagnóstico de Estrutura XML")
-st.markdown("Use esta tela para **descobrir os nomes corretos** das tags da API.")
+st.set_page_config(page_title="Lab Parser Item D", layout="wide")
+st.title("🛠️ Laboratório de Testes: Parser NOTAM")
+st.markdown("Ferramenta para validação do algoritmo usando dados reais do **Banco de Dados (Supabase)**.")
 
-tab_manual, tab_debug = st.tabs(["🧪 Teste Manual", "🕵️ Espião de XML (Debug)"])
+tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL (MANTIDA)
+# ABA 1: TESTE MANUAL (MANTIDA IGUAL - ÓTIMA PARA DEBUG RÁPIDO)
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -24,7 +21,7 @@ with tab_manual:
         dt_c = st.date_input("Fim (Item C)", value=dt_hoje + timedelta(days=60))
         str_b = dt_b.strftime("%y%m%d") + "0000"
         str_c = dt_c.strftime("%y%m%d") + "2359"
-        st.caption(f"Vigência: {dt_b.strftime('%d/%m/%Y')} a {dt_c.strftime('%d/%m/%Y')}")
+        st.caption(f"Vigência simulada: {dt_b.strftime('%d/%m/%Y')} a {dt_c.strftime('%d/%m/%Y')}")
 
     with c2:
         st.subheader("2. Texto (Item D)")
@@ -56,106 +53,158 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: ESPIÃO DE XML (PARA DESCOBRIR AS TAGS)
+# ABA 2: AUDITORIA DO BANCO DE DADOS
 # ==============================================================================
-with tab_debug:
-    st.subheader("🕵️ Raio-X da API")
-    st.info("Vamos listar TODAS as tags que a API devolve para descobrir onde está o texto.")
+with tab_banco:
+    st.subheader("🕵️ Auditoria: Supabase")
+    st.markdown("Esta aba carrega todos os NOTAMs salvos no seu banco e verifica quais têm Item D problemático.")
 
-    col_conf1, col_conf2 = st.columns([3, 1])
-    with col_conf1:
-        # Checkbox para usar as 5 FIRs ou filtro manual
-        usar_firs = st.checkbox("Consultar Brasil Todo (5 FIRs)", value=True)
-        if not usar_firs:
-            icaos_teste = st.text_input("Filtrar ICAO:", value="SBGR")
-    with col_conf2:
-        st.write("")
-        btn_debug = st.button("🚀 Rodar Diagnóstico", type="primary")
+    col_btn, col_info = st.columns([1, 3])
+    
+    with col_btn:
+        btn_carregar = st.button("🔄 Carregar do Banco", type="primary")
 
-    # URL fornecida por você
-    API_URL = "http://aisweb.decea.mil.br/api/"
-    API_KEY = "1279934730"
-    API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
-
-    if btn_debug:
-        status_text = st.empty()
-        
-        # Define icaocode
-        if usar_firs:
-            icaocode_param = "SBAZ,SBBS,SBCW,SBRE,SBAO"
-        else:
-            icaocode_param = icaos_teste.replace(" ", "")
-
-        status_text.info("📡 Conectando à API...")
-        
-        try:
-            params = {
-                'apiKey': API_KEY, 
-                'apiPass': API_PASS, 
-                'area': 'notam', 
-                'icaocode': icaocode_param
-            }
+    if btn_carregar:
+        with st.spinner("Carregando dados do Supabase..."):
+            # 1. Carrega DataFrame Bruto do Banco
+            df_full = db_manager.carregar_notams()
             
-            # Timeout alto para garantir download
-            response = requests.get(API_URL, params=params, timeout=60)
+            if df_full.empty:
+                st.warning("O banco de dados está vazio ou não foi possível conectar.")
+                st.stop()
             
-            if response.status_code != 200:
-                st.error(f"Erro HTTP {response.status_code}")
+            # Verifica se a coluna 'd' existe (Item D)
+            col_d = 'd' # Ajuste se no seu banco for outro nome, mas o padrão do db_manager é 'd'
+            if col_d not in df_full.columns:
+                st.error(f"Coluna '{col_d}' não encontrada no DataFrame. Colunas disponíveis: {list(df_full.columns)}")
                 st.stop()
 
-            # Parse do XML
+            # 2. Filtra apenas quem tem Item D preenchido
+            # Remove nulos, NaNs e strings vazias ou só com espaços
+            df_analise = df_full[df_full[col_d].notna() & (df_full[col_d].astype(str).str.strip() != '')].copy()
+            
+            # Remove falsos positivos (NIL, NONE)
+            df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
+
+            total_analise = len(df_analise)
+            
+            if total_analise == 0:
+                st.info("Nenhum NOTAM com Item D (restrição de horário) encontrado no banco.")
+                st.stop()
+            
+        st.success(f"Analisando {total_analise} NOTAMs com restrição de horário...")
+        progress_bar = st.progress(0)
+        
+        resultados = []
+        
+        # Helper para garantir formato de data para o parser (YYMMDDHHMM)
+        def format_date_for_parser(val):
+            # O db_manager geralmente retorna datetime objects.
+            # O parser aceita string YYMMDDHHMM.
             try:
-                root = ET.fromstring(response.content)
-            except ET.ParseError:
-                st.error("O conteúdo retornado não é um XML válido.")
-                st.text(response.text[:500]) # Mostra o início para ver se é HTML de erro
-                st.stop()
+                if isinstance(val, (datetime, pd.Timestamp)):
+                    return val.strftime("%y%m%d%H%M")
+                return str(val) # Tenta passar string se não for data
+            except:
+                return "2501010000" # Fallback
+
+        # 3. Loop de Análise
+        for idx, row in enumerate(df_analise.iterrows()):
+            # row é uma tupla (index, series)
+            r = row[1]
+            
+            # Atualiza barra
+            if idx % (total_analise // 20 + 1) == 0:
+                progress_bar.progress((idx + 1) / total_analise)
+            
+            # Dados
+            item_d_text = str(r[col_d]).strip()
+            loc = r.get('loc', 'SB??')
+            n_notam = r.get('n', '?')
+            val_b = r.get('b', None)
+            val_c = r.get('c', None)
+            
+            # Prepara argumentos
+            str_b = format_date_for_parser(val_b)
+            str_c = format_date_for_parser(val_c)
+            
+            status = "N/A"
+            res_visual = "-"
+            
+            try:
+                # O GRANDE TESTE
+                res = parser_notam.interpretar_periodo_atividade(item_d_text, loc, str_b, str_c)
                 
-            # Busca itens <notam>
-            items = root.findall("notam")
-            total_items = len(items)
+                if res:
+                    status = "SUCESSO"
+                    # Resumo visual: "3 dias (10/01, 11/01...)"
+                    dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
+                    if len(res) > 3: dias_str += "..."
+                    res_visual = f"{len(res)} dias ({dias_str})"
+                else:
+                    status = "FALHA"
+                    res_visual = "Retorno Vazio []"
+            except Exception as e:
+                status = "ERRO CÓDIGO"
+                res_visual = str(e)
             
-            st.markdown(f"**Status:** Encontrados `{total_items}` registros dentro da tag `<notam>`.")
-
-            if total_items == 0:
-                st.warning("Nenhuma tag <notam> encontrada. Mostrando tags da raiz:")
-                # Mostra o que tem na raiz para entender o erro
-                root_tags = {child.tag: child.text for child in root}
-                st.json(root_tags)
-                st.stop()
-
-            # --- O PULO DO GATO: MOSTRAR AS TAGS REAIS ---
-            st.divider()
-            st.subheader("🔍 Estrutura do 1º NOTAM encontrado")
-            st.markdown("Verifique abaixo qual é o nome do campo que contém o texto (ex: `txt`, `conteudo`, `body`).")
+            resultados.append({
+                "LOC": loc,
+                "NOTAM": n_notam,
+                "Item D": item_d_text,
+                "Início (B)": val_b,
+                "Fim (C)": val_c,
+                "Status": status,
+                "Detalhe": res_visual
+            })
             
-            primeiro_item = items[0]
+        progress_bar.progress(100)
+        
+        # 4. Exibição dos Resultados
+        df_res = pd.DataFrame(resultados)
+        
+        st.divider()
+        
+        # Métricas
+        falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
+        sucessos = df_res[df_res['Status'] == 'SUCESSO']
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total Analisado", total_analise)
+        k2.metric("✅ Sucessos", len(sucessos))
+        k3.metric("🚨 Falhas", len(falhas), delta_color="inverse")
+        
+        # Filtros de Visualização
+        filtro = st.radio("Visualizar:", ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], horizontal=True)
+        
+        if filtro == "🚨 Apenas Falhas":
+            df_show = falhas
+            # Agrupar erros idênticos
+            if not df_show.empty and st.checkbox("Agrupar Textos Idênticos (Remover Duplicatas)", value=True):
+                 df_show = df_show.drop_duplicates(subset=['Item D'])
+        elif filtro == "✅ Apenas Sucessos":
+            df_show = sucessos
+        else:
+            df_show = df_res
             
-            # Cria um dicionário com TODAS as tags deste item
-            tags_reais = {}
-            for child in primeiro_item:
-                # Salva nome da tag e os primeiros 100 caracteres do conteúdo
-                conteudo = str(child.text).strip() if child.text else ""
-                tags_reais[child.tag] = conteudo[:200] + ("..." if len(conteudo) > 200 else "")
-            
-            # Exibe o JSON colorido para fácil leitura
-            st.json(tags_reais)
-            
-            st.info("👆 **Olhe acima:** Qual tag contém a descrição do NOTAM? Use esse nome para corrigir o parser.")
-
-            # --- LISTAGEM TABULAR SIMPLES (PREVIEW) ---
-            st.divider()
-            st.subheader("📋 Preview dos 10 primeiros (Baseado na descoberta)")
-            
-            lista_preview = []
-            for item in items[:10]:
-                # Tenta pegar tags comuns na "força bruta" para preencher a tabela
-                dados = {}
-                for child in item:
-                    dados[child.tag] = child.text
-                lista_preview.append(dados)
-            
-            st.dataframe(pd.DataFrame(lista_preview))
-
-        except Exception as e:
-            st.error(f"Erro fatal: {e}")
+        # Tabela Final
+        st.dataframe(
+            df_show,
+            use_container_width=True,
+            column_config={
+                "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
+                "Detalhe": st.column_config.TextColumn("Resultado do Robô", width="medium"),
+                "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
+                "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim", format="DD/MM/YYYY HH:mm"),
+            },
+            height=600
+        )
+        
+        # Download
+        csv = df_show.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "📥 Baixar Relatório (CSV)",
+            data=csv,
+            file_name="auditoria_parser_banco.csv",
+            mime="text/csv"
+        )
