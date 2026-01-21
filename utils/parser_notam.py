@@ -2,7 +2,8 @@ import re
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
-MAX_DAYS_PROJECT = 90
+# AUMENTADO PARA 180 DIAS (6 MESES) PARA COBRIR NOTAMS 'PERM'
+MAX_DAYS_PROJECT = 180 
 
 # Dicionário de Meses (Inglês + Português)
 MONTH_MAP = {
@@ -94,9 +95,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     last_end = 0
     y = dt_b.year
     contexto_mes = dt_b.strftime("%b").upper()
-    
-    # Cache para "Horários Duplos" (ex: JAN 10 0900-1200 1400-1600)
-    # Se o segmento atual for vazio, usamos o texto do segmento anterior
     ultimo_segmento_valido = None
 
     for match in matches:
@@ -104,25 +102,15 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        # --- LÓGICA DE CACHE PARA HORÁRIO DUPLO ---
-        # Se o segmento não tiver nem números nem meses, provavelmente é continuação do anterior
         tem_conteudo = (re.search(r'\d', segmento) or re.search(r'[A-Z]{3}', segmento))
-        
         if not tem_conteudo and ultimo_segmento_valido:
-            # Reutiliza o texto anterior (mesmas datas) mas com o NOVO horário
             segmento = ultimo_segmento_valido
         elif tem_conteudo:
-            # Atualiza o cache
             ultimo_segmento_valido = segmento
         elif not tem_conteudo and not ultimo_segmento_valido:
-            # Caso raro: começa com horário sem data nenhuma? Ignora.
             continue
             
-        # ------------------------------------------
-
         dias_filtro = set()
-        
-        # 1. Ranges Dias Semana
         for m_wr in RE_WEEK_RANGE.finditer(segmento):
             d1_str, d2_str = m_wr.groups()
             s_idx = WEEK_MAP[d1_str]
@@ -131,7 +119,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
             else: dias_filtro.update(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
         segmento = RE_WEEK_RANGE.sub(" ", segmento)
 
-        # 2. Dias Soltos Semana
         for dia_nome, dia_idx in WEEK_MAP.items():
             if re.search(r'\b' + dia_nome + r'\b', segmento):
                 dias_filtro.add(dia_idx)
@@ -139,7 +126,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         
         segmento_limpo = segmento.strip()
         
-        # --- PROCESSAMENTO LINEAR ---
         eventos = []
         for m in RE_FULL_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'FULL_RANGE', m.groups()))
@@ -161,7 +147,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         for _, tipo, dados in eventos:
             if tipo == 'MONTH':
                 contexto_mes = dados
-            
             elif tipo == 'FULL_RANGE':
                 m1, d1, m2, d2 = dados
                 try:
@@ -176,7 +161,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                         contexto_mes = m2
                 except: pass
-
             elif tipo == 'PART_RANGE':
                 d1, d2 = dados
                 try:
@@ -188,7 +172,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         fim_dt = ajustar_ano(fim_dt, dt_b)
                         resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                 except: pass
-
             elif tipo == 'NUM':
                 d1 = dados
                 try:
@@ -218,6 +201,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     dt_c = parse_notam_date(item_c_raw)
     if not dt_b or not dt_c: return []
 
+    # TRAVA ATUALIZADA: Se for maior que 180 dias, corta.
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
