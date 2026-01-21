@@ -3,7 +3,15 @@ from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
 MAX_DAYS_PROJECT = 90
-MONTHS_LIST = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+# Dicionário de Meses (Inglês + Português) -> Número do Mês
+MONTH_MAP = {
+    # Inglês Standard
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+    # Português Comum em NOTAMs BR
+    "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
+}
 
 # Regex pré-compiladas
 RE_HORARIO_SEGMENT = re.compile(r'(\d{4}-\d{4}|SR-SS|SR-\d{4}|\d{4}-SS)')
@@ -16,8 +24,9 @@ RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2
 # Camada 2: Ranges Numéricos (19 TIL 20)
 RE_NUM_RANGE = re.compile(r'(\d{1,2})\s+TIL\s+(\d{1,2})')
 
-# Camada 3: Mês Isolado
-RE_MONTH = re.compile(r'\b(' + '|'.join(MONTHS_LIST) + r')\b')
+# Camada 3: Mês Isolado (Busca qualquer chave do dicionário MONTH_MAP)
+# Cria regex dinâmica: \b(JAN|FEB|FEV|MAR|...)\b
+RE_MONTH = re.compile(r'\b(' + '|'.join(MONTH_MAP.keys()) + r')\b')
 
 # Camada 4: Números Isolados
 RE_NUM = re.compile(r'\b(\d{1,2})\b')
@@ -86,16 +95,17 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     week_map = {"MON":0, "TUE":1, "WED":2, "THU":3, "FRI":4, "SAT":5, "SUN":6}
     resultado = []
     
-    # Encontra os delimitadores de horário
     matches = list(RE_HORARIO_SEGMENT.finditer(text))
     if not matches: return []
 
     last_end = 0
     y = dt_b.year
     
-    # --- MEMÓRIA DE CONTEXTO ---
-    # Começa com o mês do Item B. Essa variável persiste por todo o NOTAM.
+    # MEMÓRIA DE CONTEXTO: Começa com o mês do Item B
     contexto_mes = dt_b.strftime("%b").upper()
+    
+    # Se o mês do contexto inicial for PT (ex: FEV), converte para inglês padrão para consistência interna?
+    # Não precisa, pois usaremos o MONTH_MAP para buscar o número.
 
     for match in matches:
         horario_str = match.group(1)
@@ -104,7 +114,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         
         if not segmento: continue
 
-        # 1. Filtro Dias da Semana (Remove do texto para não confundir)
+        # 1. Filtro Dias da Semana
         dias_filtro = set()
         if any(d in segmento for d in week_map):
             for dia, idx in week_map.items():
@@ -115,14 +125,11 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento_limpo = segmento.strip()
         
         # --- LISTA DE EVENTOS ---
-        # Vamos mapear tudo o que acontece neste segmento em ordem de posição
-        eventos = [] # Tuplas: (posicao_inicio, tipo, dados)
+        eventos = []
 
         # A. Ranges Completos (DEC 31 TIL JAN 02)
-        # Importante: Substituímos por espaços para manter os índices dos outros elementos
         for m in RE_FULL_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'FULL_RANGE', m.groups()))
-            # Mascara o trecho encontrado com espaços para não ser pego pelas outras regex
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
         # B. Ranges Parciais (10 TIL 20)
@@ -130,7 +137,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
             eventos.append((m.start(), 'PART_RANGE', m.groups()))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        # C. Meses Isolados (JAN)
+        # C. Meses Isolados (JAN, FEV...)
         for m in RE_MONTH.finditer(segmento_limpo):
             eventos.append((m.start(), 'MONTH', m.group(1)))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
@@ -139,56 +146,58 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         for m in RE_NUM.finditer(segmento_limpo):
             eventos.append((m.start(), 'NUM', m.group(1)))
 
-        # Ordena eventos pela posição no texto
         eventos.sort(key=lambda x: x[0])
 
         # --- PROCESSAMENTO LINEAR ---
         for _, tipo, dados in eventos:
             if tipo == 'MONTH':
-                # Atualiza a memória de contexto
-                contexto_mes = dados
+                contexto_mes = dados # Atualiza memória (pode ser "JAN" ou "FEV")
             
             elif tipo == 'FULL_RANGE':
                 m1, d1, m2, d2 = dados
                 try:
-                    ini_dt = datetime.strptime(f"{y} {m1} {d1}", "%Y %b %d")
-                    fim_dt = datetime.strptime(f"{y} {m2} {d2}", "%Y %b %d")
+                    # Converte usando o mapa (aceita FEV e FEB)
+                    mes1_num = MONTH_MAP.get(m1)
+                    mes2_num = MONTH_MAP.get(m2)
                     
-                    ini_dt = ajustar_ano(ini_dt, dt_b)
-                    # Lógica de virada de ano específica para range completo
-                    if fim_dt.month < ini_dt.month: fim_dt = fim_dt.replace(year=ini_dt.year + 1)
-                    else: fim_dt = fim_dt.replace(year=ini_dt.year)
+                    if mes1_num and mes2_num:
+                        ini_dt = datetime(y, mes1_num, int(d1))
+                        fim_dt = datetime(y, mes2_num, int(d2))
+                        
+                        ini_dt = ajustar_ano(ini_dt, dt_b)
+                        if fim_dt.month < ini_dt.month: fim_dt = fim_dt.replace(year=ini_dt.year + 1)
+                        else: fim_dt = fim_dt.replace(year=ini_dt.year)
 
-                    resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
-                    # Atualiza contexto para o mês final do range
-                    contexto_mes = m2
+                        resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
+                        contexto_mes = m2
                 except: pass
 
             elif tipo == 'PART_RANGE':
                 d1, d2 = dados
                 try:
-                    mes_obj = datetime.strptime(contexto_mes, "%b")
-                    ini_dt = datetime(y, mes_obj.month, int(d1))
-                    fim_dt = datetime(y, mes_obj.month, int(d2))
-                    
-                    ini_dt = ajustar_ano(ini_dt, dt_b)
-                    fim_dt = ajustar_ano(fim_dt, dt_b)
-                    
-                    resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
+                    mes_num = MONTH_MAP.get(contexto_mes) # Pega da memória
+                    if mes_num:
+                        ini_dt = datetime(y, mes_num, int(d1))
+                        fim_dt = datetime(y, mes_num, int(d2))
+                        
+                        ini_dt = ajustar_ano(ini_dt, dt_b)
+                        fim_dt = ajustar_ano(fim_dt, dt_b)
+                        
+                        resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                 except: pass
 
             elif tipo == 'NUM':
                 d1 = dados
                 try:
-                    mes_obj = datetime.strptime(contexto_mes, "%b")
-                    dt_base = datetime(y, mes_obj.month, int(d1))
-                    dt_base = ajustar_ano(dt_base, dt_b)
-                    
-                    if not dias_filtro or dt_base.weekday() in dias_filtro:
-                        resultado.extend(extrair_horarios(horario_str, dt_base))
+                    mes_num = MONTH_MAP.get(contexto_mes) # Pega da memória
+                    if mes_num:
+                        dt_base = datetime(y, mes_num, int(d1))
+                        dt_base = ajustar_ano(dt_base, dt_b)
+                        
+                        if not dias_filtro or dt_base.weekday() in dias_filtro:
+                            resultado.extend(extrair_horarios(horario_str, dt_base))
                 except: pass
 
-    # Filtro Final e Ordenação
     resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=1)]
     unique_res = []
     seen = set()
