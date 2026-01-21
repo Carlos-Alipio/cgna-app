@@ -10,7 +10,7 @@ st.markdown("Ferramenta para validação do algoritmo usando dados reais do **Ba
 tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL (MANTIDA IGUAL - ÓTIMA PARA DEBUG RÁPIDO)
+# ABA 1: TESTE MANUAL
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -53,158 +53,142 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: AUDITORIA DO BANCO DE DADOS
+# ABA 2: AUDITORIA DO BANCO DE DADOS (CORRIGIDA)
 # ==============================================================================
 with tab_banco:
     st.subheader("🕵️ Auditoria: Supabase")
-    st.markdown("Esta aba carrega todos os NOTAMs salvos no seu banco e verifica quais têm Item D problemático.")
+    st.markdown("Verificação de NOTAMs com Item D, corrigindo datas brutas do banco.")
 
-    col_btn, col_info = st.columns([1, 3])
-    
-    with col_btn:
-        btn_carregar = st.button("🔄 Carregar do Banco", type="primary")
-
-    if btn_carregar:
-        with st.spinner("Carregando dados do Supabase..."):
-            # 1. Carrega DataFrame Bruto do Banco
+    if st.button("🔄 Carregar do Banco", type="primary"):
+        with st.spinner("Carregando e processando datas..."):
             df_full = db_manager.carregar_notams()
             
             if df_full.empty:
-                st.warning("O banco de dados está vazio ou não foi possível conectar.")
+                st.warning("Banco vazio.")
                 st.stop()
             
-            # Verifica se a coluna 'd' existe (Item D)
-            col_d = 'd' # Ajuste se no seu banco for outro nome, mas o padrão do db_manager é 'd'
+            # Filtra apenas quem tem Item D
+            col_d = 'd'
             if col_d not in df_full.columns:
-                st.error(f"Coluna '{col_d}' não encontrada no DataFrame. Colunas disponíveis: {list(df_full.columns)}")
+                st.error("Coluna 'd' não encontrada.")
                 st.stop()
 
-            # 2. Filtra apenas quem tem Item D preenchido
-            # Remove nulos, NaNs e strings vazias ou só com espaços
             df_analise = df_full[df_full[col_d].notna() & (df_full[col_d].astype(str).str.strip() != '')].copy()
-            
-            # Remove falsos positivos (NIL, NONE)
             df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
 
-            total_analise = len(df_analise)
+            total = len(df_analise)
+            st.success(f"Analisando {total} registros...")
             
-            if total_analise == 0:
-                st.info("Nenhum NOTAM com Item D (restrição de horário) encontrado no banco.")
-                st.stop()
-            
-        st.success(f"Analisando {total_analise} NOTAMs com restrição de horário...")
-        progress_bar = st.progress(0)
-        
-        resultados = []
-        
-        # Helper para garantir formato de data para o parser (YYMMDDHHMM)
-        def format_date_for_parser(val):
-            # O db_manager geralmente retorna datetime objects.
-            # O parser aceita string YYMMDDHHMM.
-            try:
+            progress_bar = st.progress(0)
+            resultados = []
+
+            # --- FUNÇÃO DE CORREÇÃO DE DATA ---
+            def parse_db_date(val):
+                """
+                Força a interpretação correta do formato NOTAM (YYMMDDHHMM)
+                mesmo que o banco traga como número ou string.
+                """
+                val_str = str(val).strip()
+                # Remove pontuação se houver (ex: 25-12...)
+                val_clean = val_str.replace("-", "").replace(":", "").replace(" ", "")
+                
+                # Se for formato YYMMDDHHMM (10 digitos)
+                if len(val_clean) == 10 and val_clean.isdigit():
+                    return val_clean # Retorna string limpa para o parser usar
+                
+                # Se for timestamp do pandas, converte
                 if isinstance(val, (datetime, pd.Timestamp)):
                     return val.strftime("%y%m%d%H%M")
-                return str(val) # Tenta passar string se não for data
-            except:
-                return "2501010000" # Fallback
+                    
+                return "2601010000" # Fallback seguro (2026) se falhar
 
-        # 3. Loop de Análise
-        for idx, row in enumerate(df_analise.iterrows()):
-            # row é uma tupla (index, series)
-            r = row[1]
-            
-            # Atualiza barra
-            if idx % 50 == 0:
-                progress_bar.progress(min((idx + 1) / total_analise, 1.0))
-            
-            # Dados
-            item_d_text = str(r[col_d]).strip()
-            loc = r.get('loc', 'SB??')
-            n_notam = r.get('n', '?')
-            val_b = r.get('b', None)
-            val_c = r.get('c', None)
-            
-            # Prepara argumentos
-            str_b = format_date_for_parser(val_b)
-            str_c = format_date_for_parser(val_c)
-            
-            status = "N/A"
-            res_visual = "-"
-            
-            try:
-                # O GRANDE TESTE
-                res = parser_notam.interpretar_periodo_atividade(item_d_text, loc, str_b, str_c)
+            # --- LOOP DE ANÁLISE ---
+            for idx, row in enumerate(df_analise.iterrows()):
+                r = row[1]
                 
-                if res:
-                    status = "SUCESSO"
-                    # Resumo visual: "3 dias (10/01, 11/01...)"
-                    dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
-                    if len(res) > 3: dias_str += "..."
-                    res_visual = f"{len(res)} dias ({dias_str})"
-                else:
-                    status = "FALHA"
-                    res_visual = "Retorno Vazio []"
-            except Exception as e:
-                status = "ERRO CÓDIGO"
-                res_visual = str(e)
+                # Barra de progresso otimizada
+                if idx % 50 == 0:
+                    progress_bar.progress(min((idx + 1) / total, 1.0))
+                
+                item_d = str(r[col_d]).strip()
+                loc = r.get('loc', 'SB??')
+                n_notam = r.get('n', '?')
+                
+                # Pega valores brutos do banco
+                raw_b = r.get('b', '')
+                raw_c = r.get('c', '')
+                
+                # Sanitiza para o formato que o parser entende (YYMMDDHHMM)
+                str_b = parse_db_date(raw_b)
+                str_c = parse_db_date(raw_c)
+                
+                status = "N/A"
+                detalhe = "-"
+                
+                try:
+                    res = parser_notam.interpretar_periodo_atividade(item_d, loc, str_b, str_c)
+                    if res:
+                        status = "SUCESSO"
+                        dias_str = ", ".join([d['inicio'].strftime('%d/%m') for d in res[:3]])
+                        if len(res) > 3: dias_str += "..."
+                        detalhe = f"{len(res)} dias ({dias_str})"
+                    else:
+                        status = "FALHA"
+                        detalhe = "Retorno Vazio []"
+                except Exception as e:
+                    status = "ERRO CÓDIGO"
+                    detalhe = str(e)
+                
+                # Tenta converter para datetime real APENAS para exibição na tabela (Visual)
+                try:
+                    view_b = datetime.strptime(str_b, "%y%m%d%H%M")
+                except: view_b = None
+                
+                try:
+                    view_c = datetime.strptime(str_c, "%y%m%d%H%M")
+                except: view_c = None
+
+                resultados.append({
+                    "LOC": loc,
+                    "NOTAM": n_notam,
+                    "Item D": item_d,
+                    "Início (B)": view_b, # Objeto datetime para a coluna ficar bonita
+                    "Fim (C)": view_c,
+                    "Status": status,
+                    "Detalhe": detalhe
+                })
             
-            resultados.append({
-                "LOC": loc,
-                "NOTAM": n_notam,
-                "Item D": item_d_text,
-                "Início (B)": val_b,
-                "Fim (C)": val_c,
-                "Status": status,
-                "Detalhe": res_visual
-            })
+            progress_bar.progress(100)
             
-        progress_bar.progress(100)
-        
-        # 4. Exibição dos Resultados
-        df_res = pd.DataFrame(resultados)
-        
-        st.divider()
-        
-        # Métricas
-        falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
-        sucessos = df_res[df_res['Status'] == 'SUCESSO']
-        
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Total Analisado", total_analise)
-        k2.metric("✅ Sucessos", len(sucessos))
-        k3.metric("🚨 Falhas", len(falhas), delta_color="inverse")
-        
-        # Filtros de Visualização
-        filtro = st.radio("Visualizar:", ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], horizontal=True)
-        
-        if filtro == "🚨 Apenas Falhas":
-            df_show = falhas
-            # Agrupar erros idênticos
-            if not df_show.empty and st.checkbox("Agrupar Textos Idênticos (Remover Duplicatas)", value=True):
-                 df_show = df_show.drop_duplicates(subset=['Item D'])
-        elif filtro == "✅ Apenas Sucessos":
-            df_show = sucessos
-        else:
-            df_show = df_res
+            # --- EXIBIÇÃO ---
+            df_res = pd.DataFrame(resultados)
             
-        # Tabela Final
-        st.dataframe(
-            df_show,
-            use_container_width=True,
-            column_config={
-                "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
-                "Detalhe": st.column_config.TextColumn("Resultado do Robô", width="medium"),
-                "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
-                "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim", format="DD/MM/YYYY HH:mm"),
-            },
-            height=600
-        )
-        
-        # Download
-        csv = df_show.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            "📥 Baixar Relatório (CSV)",
-            data=csv,
-            file_name="auditoria_parser_banco.csv",
-            mime="text/csv"
-        )
+            st.divider()
+            
+            k1, k2, k3 = st.columns(3)
+            falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
+            sucessos = df_res[df_res['Status'] == 'SUCESSO']
+            
+            k1.metric("Total", total)
+            k2.metric("Sucessos", len(sucessos))
+            k3.metric("Falhas", len(falhas), delta_color="inverse")
+            
+            filtro = st.radio("Visualizar:", ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], horizontal=True)
+            
+            if filtro == "🚨 Apenas Falhas":
+                df_show = falhas
+            elif filtro == "✅ Apenas Sucessos":
+                df_show = sucessos
+            else:
+                df_show = df_res
+            
+            st.dataframe(
+                df_show,
+                use_container_width=True,
+                column_config={
+                    "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
+                    "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
+                    "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim", format="DD/MM/YYYY HH:mm"),
+                },
+                height=600
+            )
