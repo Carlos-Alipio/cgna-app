@@ -3,45 +3,63 @@ import pandas as pd
 from sqlalchemy import text
 from datetime import datetime, timedelta
 
+# --- CONEXÃO CENTRALIZADA ---
 def get_connection():
     return st.connection("supabase", type="sql")
 
+# --- GERENCIAMENTO DE NOTAMS ---
 def salvar_notams(df):
     conn = get_connection()
     
     # ==============================================================================
-    # 🛠️ HOOK DE CORREÇÃO: SE "PERM" EM C -> DATA B + 365 DIAS
+    # 🛠️ HOOK DE CORREÇÃO: REGRA HÍBRIDA (PERM EM C **OU** CONTEXTO EM D)
     # ==============================================================================
     try:
         df['b_dt'] = pd.to_datetime(df['b'], errors='coerce')
         
         def corrigir_data_fim(row):
             data_c_raw = str(row.get('c', '')).upper()
+            texto_d = str(row.get('d', '')).upper()
             dt_inicio = row['b_dt']
             
             if pd.isna(dt_inicio):
-                return row['c']
+                return row['c'] 
             
-            # REGRA ÚNICA: PERM NO CAMPO C = 365 DIAS
-            if "PERM" in data_c_raw:
+            # 1. Verifica PERM no campo C (Sua regra principal)
+            tem_perm_em_c = "PERM" in data_c_raw
+            
+            # 2. Verifica Gatilhos no Texto D (Para recuperar casos como SBRP)
+            gatilhos = ["REF AIP", "REF: AIP", "AD 2", "PERM", "AIP AD"]
+            tem_perm_no_texto = any(g in texto_d for g in gatilhos)
+            
+            # Se tiver PERM no C OU indicativo forte no texto -> 365 dias
+            if tem_perm_em_c or tem_perm_no_texto:
                 return dt_inicio + timedelta(days=365)
             
             return row['c']
 
-        if set(['b', 'c']).issubset(df.columns):
+        if set(['b', 'c', 'd']).issubset(df.columns):
             df['c'] = df.apply(corrigir_data_fim, axis=1)
         
         if 'b_dt' in df.columns:
             df = df.drop(columns=['b_dt'])
             
     except Exception as e:
-        print(f"Erro ao aplicar regra PERM: {e}")
+        print(f"Aviso: Erro na correção PERM: {e}")
+    
     # ==============================================================================
 
     try:
         with conn.session as s:
             with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
-                df.to_sql('notams', conn.engine, if_exists='replace', index=False, chunksize=500, method='multi')
+                df.to_sql(
+                    'notams', 
+                    conn.engine, 
+                    if_exists='replace', # Isso já substitui a tabela inteira
+                    index=False, 
+                    chunksize=500, 
+                    method='multi'
+                )
         return True
     except Exception as e:
         st.error(f"Erro ao salvar no Banco: {e}")
@@ -54,6 +72,29 @@ def carregar_notams():
     except:
         return pd.DataFrame()
 
+# --- NOVA FUNÇÃO: LIMPEZA TOTAL ---
+def limpar_tabela_notams():
+    """Apaga todos os registros da tabela NOTAMS"""
+    conn = get_connection()
+    try:
+        with conn.session as s:
+            # TRUNCATE é mais rápido e reseta a tabela completamente
+            s.execute(text("TRUNCATE TABLE notams;"))
+            s.commit()
+        return True
+    except Exception as e:
+        # Fallback para DELETE se TRUNCATE falhar (dependendo da permissão)
+        try:
+            with conn.session as s:
+                s.execute(text("DELETE FROM notams;"))
+                s.commit()
+            return True
+        except Exception as e2:
+            st.error(f"Erro ao limpar tabela: {e2}")
+            return False
+
+# ... (Mantenha carregar_frota_monitorada, adicionar_icao, etc. iguais) ...
+# --- GERENCIAMENTO DE FROTA (ICAO) ---
 def carregar_frota_monitorada():
     conn = get_connection()
     try:
