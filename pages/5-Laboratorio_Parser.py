@@ -18,7 +18,8 @@ with tab_manual:
         st.subheader("1. Contexto")
         dt_hoje = datetime.now()
         dt_b = st.date_input("Início (Item B)", value=dt_hoje)
-        dt_c = st.date_input("Fim (Item C)", value=dt_hoje + timedelta(days=60))
+        # Aumentado default manual para 180 dias para facilitar testes PERM
+        dt_c = st.date_input("Fim (Item C)", value=dt_hoje + timedelta(days=180))
         str_b = dt_b.strftime("%y%m%d") + "0000"
         str_c = dt_c.strftime("%y%m%d") + "2359"
         st.caption(f"Vigência simulada: {dt_b.strftime('%d/%m/%Y')} a {dt_c.strftime('%d/%m/%Y')}")
@@ -71,17 +72,8 @@ with tab_banco:
                 st.error("Coluna 'd' não encontrada.")
                 st.stop()
 
-            # Filtra quem tem D ou quem é PERM (para não perder o caso do user)
-            # Mas como o parser precisa de texto D, se não tiver texto, ele retorna vazio mesmo sendo PERM.
-            # O usuário disse "neste notam onde não há 'd'".
-            # Se não há D, o parser retorna [], o que está correto para a LÓGICA DE HORÁRIOS.
-            # O problema era a data FIM visualizada.
-            
-            df_analise = df_full.copy()
-            # Remove nulos apenas se B ou C forem nulos, mas mantém se D for nulo para vermos o PERM?
-            # Para o parser funcionar, precisamos de algo. Se D for vazio, o parser retorna vazio.
-            # Vamos manter o filtro de D existente, assumindo que o caso PERM do usuário tem algum texto.
-            df_analise = df_analise[df_analise[col_d].notna() & (df_analise[col_d].astype(str).str.strip() != '')]
+            # Mantém linhas onde D existe (necessário para o parser)
+            df_analise = df_full[df_full[col_d].notna() & (df_full[col_d].astype(str).str.strip() != '')].copy()
             df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
 
             total = len(df_analise)
@@ -90,21 +82,34 @@ with tab_banco:
 
             def parse_db_date(val, start_date_obj=None):
                 """
-                Lê a data do banco. Se for PERM, calcula Start + 180 dias.
+                Interpreta data do banco. Trata 'PERM', Vazio, 'None' como Permanente.
                 """
                 val_str = str(val).strip().upper()
                 
-                # --- TRATAMENTO PARA PERM ---
-                if "PERM" in val_str and start_date_obj:
+                # Critérios para considerar PERMANENTE
+                # 1. Contém "PERM"
+                # 2. É Vazio (""), None ("NONE"), ou NaN ("NAN")
+                is_perm = (
+                    "PERM" in val_str or 
+                    val_str in ["", "NONE", "NAN", "NULL", "NAT"]
+                )
+                
+                if is_perm and start_date_obj:
                     # Adiciona 180 dias (6 meses)
                     dt_perm = start_date_obj + timedelta(days=180)
                     return dt_perm.strftime("%y%m%d%H%M")
                 
+                # Limpeza padrão
                 val_clean = val_str.replace("-", "").replace(":", "").replace(" ", "")
+                
                 if len(val_clean) == 10 and val_clean.isdigit(): return val_clean
                 if isinstance(val, (datetime, pd.Timestamp)): return val.strftime("%y%m%d%H%M")
                 
-                # Fallback genérico se falhar tudo
+                # Fallback: Se não é PERM e falhou parse, assume PERM (B + 180) por segurança?
+                # Melhor retornar B + 180 do que B + 0.
+                if start_date_obj:
+                     return (start_date_obj + timedelta(days=180)).strftime("%y%m%d%H%M")
+                
                 return "2601010000"
 
             for idx, row in enumerate(df_analise.iterrows()):
@@ -115,15 +120,15 @@ with tab_banco:
                 loc = r.get('loc', 'SB??')
                 n_notam = r.get('n', '?')
                 
-                # 1. Processa Data Início (B) primeiro
+                # 1. Processa Data Início (B)
                 raw_b = r.get('b', '')
                 str_b = parse_db_date(raw_b) 
                 
-                # Tenta criar objeto datetime de B para usar no cálculo do PERM
+                # Cria objeto datetime B para referência
                 try: dt_b_obj = datetime.strptime(str_b, "%y%m%d%H%M")
-                except: dt_b_obj = datetime.now() # Fallback
+                except: dt_b_obj = datetime.now()
 
-                # 2. Processa Data Fim (C) passando B como referência
+                # 2. Processa Data Fim (C) com lógica PERM atualizada
                 raw_c = r.get('c', '')
                 str_c = parse_db_date(raw_c, start_date_obj=dt_b_obj)
                 

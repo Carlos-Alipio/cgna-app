@@ -2,8 +2,8 @@ import re
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
-# AUMENTADO PARA 180 DIAS (6 MESES) PARA COBRIR NOTAMS 'PERM'
-MAX_DAYS_PROJECT = 180 
+# AUMENTADO PARA 365 DIAS (1 ANO) PARA NÃO CORTAR VIGÊNCIAS LONGAS
+MAX_DAYS_PROJECT = 365 
 
 # Dicionário de Meses (Inglês + Português)
 MONTH_MAP = {
@@ -102,6 +102,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
+        # Cache de segmento para horários duplos
         tem_conteudo = (re.search(r'\d', segmento) or re.search(r'[A-Z]{3}', segmento))
         if not tem_conteudo and ultimo_segmento_valido:
             segmento = ultimo_segmento_valido
@@ -201,7 +202,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     dt_c = parse_notam_date(item_c_raw)
     if not dt_b or not dt_c: return []
 
-    # TRAVA ATUALIZADA: Se for maior que 180 dias, corta.
+    # TRAVA DE SEGURANÇA: CORTA EM 365 DIAS (Para evitar loop infinito em NOTAM PERM)
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
