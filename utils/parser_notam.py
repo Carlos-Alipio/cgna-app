@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 # --- CONFIGURAÇÕES ---
 MAX_DAYS_PROJECT = 365 
 
+# Dicionários de Tradução
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
@@ -30,8 +31,9 @@ RE_NUM = re.compile(r'\b(\d{1,2})\b')
 def parse_notam_date(date_str):
     try:
         if not date_str: return None
-        # Se contiver PERM, retorna None (para cálculo externo ou fallback)
+        # Se contiver PERM, retorna None (será tratado na função mestre)
         if "PERM" in str(date_str).upper(): return None
+        
         clean_str = str(date_str).replace("-", "").replace(":", "").replace(" ", "").strip()
         if len(clean_str) != 10: return None
         return datetime.strptime(clean_str, "%y%m%d%H%M")
@@ -52,6 +54,7 @@ def extrair_horarios(texto_horario, base_date):
         if "-" not in parte: continue
         try:
             inicio_str, fim_str = parte.split("-")
+            
             if "SR" in inicio_str: dt_ini = sr_dt
             elif "SS" in inicio_str: dt_ini = ss_dt
             elif len(inicio_str) == 4 and inicio_str.isdigit():
@@ -200,7 +203,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     is_perm_raw = item_c_raw and "PERM" in str(item_c_raw).upper()
     dt_c = parse_notam_date(item_c_raw)
     
-    # REGRA SIMPLIFICADA: Se PERM no campo C (Raw) ou dt_c veio vazio -> +365 dias
+    # REGRA DE PROJEÇÃO: Se PERM ou Vazio -> B + 365 dias
     if is_perm_raw or not dt_c:
         dt_c = dt_b + timedelta(days=365)
 
@@ -220,9 +223,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     text = text.replace(u'\xa0', u' ')
 
     res = []
+    
+    # Tentativa 1: Segmentação por Horário
     if RE_HORARIO_SEGMENT.search(text):
         res = processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao)
     
+    # Tentativa 2: DLY/DAILY
     if not res:
         if "DLY" in text or "DAILY" in text:
             horarios_str = text.replace("DLY", "").replace("DAILY", "").strip()
@@ -235,6 +241,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     if k in exc_text: dias_exc.add(v)
             res = gerar_dias_entre(dt_b, dt_c, dias_exc, horarios_str)
     
+    # Tentativa 3: TIL (Ranges de Dia da Semana)
     if not res:
         m_week = re.search(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b', text)
         if m_week:
@@ -250,6 +257,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 curr += timedelta(days=1)
             res = temp_res
 
+    # Tentativa 4: Dias Específicos (MON, TUE...)
     if not res:
         if any(d in text for d in WEEK_MAP):
             alvo = {WEEK_MAP[d] for d in WEEK_MAP if d in text}
@@ -263,7 +271,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 curr += timedelta(days=1)
             res = temp_res
             
-    # 7. FALLBACK FINAL (H24 PARA TEXTO DESCRITIVO)
+    # 6. FALLBACK FINAL (H24 PARA TEXTO DESCRITIVO SEM HORÁRIOS)
     if not res:
          return [{'inicio': dt_b, 'fim': dt_c}]
 
