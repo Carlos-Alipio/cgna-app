@@ -2,17 +2,16 @@ import re
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÕES ---
-# AUMENTADO PARA 365 DIAS (1 ANO) PARA NÃO CORTAR VIGÊNCIAS LONGAS
-MAX_DAYS_PROJECT = 365 
+MAX_DAYS_PROJECT = 365 # 1 Ano de projeção
 
-# Dicionário de Meses (Inglês + Português)
+# Dicionário de Meses
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
     "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
 }
 
-# Dicionário de Dias da Semana (Inglês + Português)
+# Dicionário de Dias da Semana
 WEEK_MAP = {
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
@@ -33,8 +32,17 @@ RE_NUM = re.compile(r'\b(\d{1,2})\b')
 
 def parse_notam_date(date_str):
     try:
-        if not date_str or len(str(date_str)) != 10: return None
-        return datetime.strptime(str(date_str), "%y%m%d%H%M")
+        # Se for string "PERM" ou vazio, retorna None para tratar depois
+        if not date_str or "PERM" in str(date_str).upper():
+            return None
+        
+        # Tenta limpar string
+        clean_str = str(date_str).replace("-", "").replace(":", "").replace(" ", "").strip()
+        
+        if len(clean_str) != 10: 
+            return None
+            
+        return datetime.strptime(clean_str, "%y%m%d%H%M")
     except: return None
 
 def calculate_sun_times(date_obj):
@@ -102,7 +110,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        # Cache de segmento para horários duplos
         tem_conteudo = (re.search(r'\d', segmento) or re.search(r'[A-Z]{3}', segmento))
         if not tem_conteudo and ultimo_segmento_valido:
             segmento = ultimo_segmento_valido
@@ -196,16 +203,27 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     return sorted(unique_res, key=lambda x: x['inicio'])
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
-    if not item_d_text or not item_d_text.strip(): return []
-
+    # 1. PROCESSA DATA B
     dt_b = parse_notam_date(item_b_raw)
-    dt_c = parse_notam_date(item_c_raw)
-    if not dt_b or not dt_c: return []
+    if not dt_b: return []
 
-    # TRAVA DE SEGURANÇA: CORTA EM 365 DIAS (Para evitar loop infinito em NOTAM PERM)
+    # 2. PROCESSA DATA C (Lida com PERM)
+    dt_c = parse_notam_date(item_c_raw)
+    
+    # Se C for None (porque era PERM ou vazio), projeta B + 365 dias
+    if not dt_c:
+        dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
+    
+    # Trava de segurança para intervalos gigantes
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
+    # 3. VERIFICA ITEM D
+    # Se Item D estiver vazio ou nulo, é atividade CONTINUA (H24)
+    if not item_d_text or not str(item_d_text).strip():
+        return [{'inicio': dt_b, 'fim': dt_c}]
+
+    # 4. PARSER NORMAL
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = RE_BARRA_DATA.sub(r'\1', text)
