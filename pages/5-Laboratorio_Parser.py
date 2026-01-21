@@ -6,14 +6,14 @@ import re
 from datetime import datetime, timedelta
 from utils import parser_notam
 
-st.set_page_config(page_title="Lab Parser Item D", layout="wide")
-st.title("🛠️ Laboratório: Diagnóstico de Dados")
-st.markdown("Use esta tela para descobrir por que o Item D não está sendo encontrado.")
+st.set_page_config(page_title="Lab Parser & Debug", layout="wide")
+st.title("🛠️ Laboratório: Diagnóstico de Estrutura XML")
+st.markdown("Use esta tela para **descobrir os nomes corretos** das tags da API.")
 
-tab_manual, tab_lote = st.tabs(["🧪 Teste Manual", "📦 Auditoria em Lote (Debug)"])
+tab_manual, tab_debug = st.tabs(["🧪 Teste Manual", "🕵️ Espião de XML (Debug)"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL (MANTIDA IGUAL)
+# ABA 1: TESTE MANUAL (MANTIDA)
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -56,134 +56,106 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: DIAGNÓSTICO EM LOTE
+# ABA 2: ESPIÃO DE XML (PARA DESCOBRIR AS TAGS)
 # ==============================================================================
-with tab_lote:
-    st.subheader("🕵️ Espião de XML (Debug)")
-    st.info("Esta ferramenta vai mostrar o texto cru que vem da API para entendermos o erro.")
+with tab_debug:
+    st.subheader("🕵️ Raio-X da API")
+    st.info("Vamos listar TODAS as tags que a API devolve para descobrir onde está o texto.")
 
     col_conf1, col_conf2 = st.columns([3, 1])
     with col_conf1:
-        # Padrão: Buscar Brasil Todo para pegar massa de dados
-        brasil_todo = st.checkbox("Analisa Brasil Todo (5 FIRs)", value=True)
-        if not brasil_todo:
-            icaos_teste = st.text_input("Filtrar Localidades:", value="SBGR, SBGL, SBSP")
+        # Checkbox para usar as 5 FIRs ou filtro manual
+        usar_firs = st.checkbox("Consultar Brasil Todo (5 FIRs)", value=True)
+        if not usar_firs:
+            icaos_teste = st.text_input("Filtrar ICAO:", value="SBGR")
     with col_conf2:
         st.write("")
-        btn_iniciar = st.button("🚀 Iniciar Diagnóstico", type="primary")
+        btn_debug = st.button("🚀 Rodar Diagnóstico", type="primary")
 
+    # URL fornecida por você
     API_URL = "http://aisweb.decea.mil.br/api/"
     API_KEY = "1279934730"
     API_PASS = "cb8a3010-a095-1033-a49b-72567f175e3a"
 
-    if btn_iniciar:
+    if btn_debug:
         status_text = st.empty()
         
-        # --- 1. BUSCA ---
-        if brasil_todo:
-            icaos_consulta = "SBAZ,SBBS,SBCW,SBRE,SBAO"
+        # Define icaocode
+        if usar_firs:
+            icaocode_param = "SBAZ,SBBS,SBCW,SBRE,SBAO"
         else:
-            icaos_consulta = icaos_teste.replace(" ", "")
+            icaocode_param = icaos_teste.replace(" ", "")
 
-        status_text.info(f"📡 Baixando dados...")
-        todos_items_xml = []
+        status_text.info("📡 Conectando à API...")
         
         try:
             params = {
-                'apiKey': API_KEY, 'apiPass': API_PASS, 'area': 'notam', 'icaocode': icaos_consulta
+                'apiKey': API_KEY, 
+                'apiPass': API_PASS, 
+                'area': 'notam', 
+                'icaocode': icaocode_param
             }
+            
+            # Timeout alto para garantir download
             response = requests.get(API_URL, params=params, timeout=60)
-            if response.status_code == 200:
-                try:
-                    root = ET.fromstring(response.content)
-                    todos_items_xml = root.findall("notam")
-                except:
-                    st.error("XML inválido.")
-                    st.stop()
-            else:
-                st.error(f"Erro API: {response.status_code}")
+            
+            if response.status_code != 200:
+                st.error(f"Erro HTTP {response.status_code}")
                 st.stop()
-        except Exception as e:
-            st.error(f"Erro conexão: {e}")
-            st.stop()
 
-        total_items = len(todos_items_xml)
-        st.write(f"**Total de NOTAMs baixados:** {total_items}")
-
-        # --- 2. ESPIONAGEM (MOSTRAR OS PRIMEIROS 5 NOTAMS COMPLETOS) ---
-        st.divider()
-        st.markdown("### 🔍 Raio-X dos 5 primeiros registros")
-        st.markdown("Veja abaixo como o texto está chegando e se a tag `<texto>` existe.")
-
-        for i in range(min(5, total_items)):
-            item = todos_items_xml[i]
-            
-            # Tenta pegar tags comuns
-            raw_text = item.find("texto").text if item.find("texto") is not None else "TAG <texto> NÃO ENCONTRADA"
-            raw_id = item.find("notam_id").text if item.find("notam_id") is not None else "?"
-            
-            with st.expander(f"NOTAM #{i+1}: {raw_id}", expanded=True):
-                st.code(raw_text, language="text")
+            # Parse do XML
+            try:
+                root = ET.fromstring(response.content)
+            except ET.ParseError:
+                st.error("O conteúdo retornado não é um XML válido.")
+                st.text(response.text[:500]) # Mostra o início para ver se é HTML de erro
+                st.stop()
                 
-                # Teste da Regex ao vivo
-                match_d = re.search(r'(?:^|\s|\n)D\)\s*(.+?)(?=\s*[E-G]\)|\s*$)', raw_text, re.DOTALL | re.IGNORECASE)
-                if match_d:
-                    st.success(f"✅ Regex encontrou: '{match_d.group(1).strip()}'")
-                else:
-                    st.error("❌ Regex NÃO encontrou o padrão 'D)' neste texto.")
-
-        # --- 3. PROCESSAMENTO GERAL ---
-        st.divider()
-        st.markdown("### 📊 Tentativa de Processamento em Massa")
-        
-        resultados_lote = []
-        
-        def fmt_api_date(d_str):
-            if not d_str: return "2501010000"
-            try: return datetime.strptime(d_str, "%Y-%m-%d %H:%M:%S").strftime("%y%m%d%H%M")
-            except: return "2501010000"
-
-        for item in todos_items_xml:
-            # Extração Segura
-            texto = item.find("texto").text if item.find("texto") is not None else ""
-            notam_id = item.find("notam_id").text if item.find("notam_id") is not None else "?"
-            loc = item.find("loc").text if item.find("loc") is not None else "?"
+            # Busca itens <notam>
+            items = root.findall("notam")
+            total_items = len(items)
             
-            # --- REGEX MELHORADA ---
-            # Procura D) no inicio da linha, ou após espaço, ou após newline
-            # Captura tudo até achar E), F), G) ou fim da string
-            match_d = re.search(r'(?:^|\s|\n)D\)\s*(.+?)(?=\s*[E-G]\)|\s*$)', texto, re.DOTALL | re.IGNORECASE)
-            item_d = match_d.group(1).strip() if match_d else None
+            st.markdown(f"**Status:** Encontrados `{total_items}` registros dentro da tag `<notam>`.")
+
+            if total_items == 0:
+                st.warning("Nenhuma tag <notam> encontrada. Mostrando tags da raiz:")
+                # Mostra o que tem na raiz para entender o erro
+                root_tags = {child.tag: child.text for child in root}
+                st.json(root_tags)
+                st.stop()
+
+            # --- O PULO DO GATO: MOSTRAR AS TAGS REAIS ---
+            st.divider()
+            st.subheader("🔍 Estrutura do 1º NOTAM encontrado")
+            st.markdown("Verifique abaixo qual é o nome do campo que contém o texto (ex: `txt`, `conteudo`, `body`).")
             
-            status = "SEM ITEM D"
+            primeiro_item = items[0]
             
-            if item_d:
-                if item_d.upper() in ["NIL", "NONE", ""]:
-                    status = "IGNORADO (NIL)"
-                else:
-                    # Tenta rodar o parser
-                    try:
-                        dt_ini = item.find("dt_ini").text
-                        dt_fim = item.find("dt_fim").text
-                        res = parser_notam.interpretar_periodo_atividade(
-                            item_d, loc, fmt_api_date(dt_ini), fmt_api_date(dt_fim)
-                        )
-                        status = "SUCESSO" if res else "FALHA PARSER"
-                    except:
-                        status = "ERRO CODIGO"
+            # Cria um dicionário com TODAS as tags deste item
+            tags_reais = {}
+            for child in primeiro_item:
+                # Salva nome da tag e os primeiros 100 caracteres do conteúdo
+                conteudo = str(child.text).strip() if child.text else ""
+                tags_reais[child.tag] = conteudo[:200] + ("..." if len(conteudo) > 200 else "")
+            
+            # Exibe o JSON colorido para fácil leitura
+            st.json(tags_reais)
+            
+            st.info("👆 **Olhe acima:** Qual tag contém a descrição do NOTAM? Use esse nome para corrigir o parser.")
 
-            resultados_lote.append({
-                "NOTAM": notam_id,
-                "Texto Bruto (Início)": texto[:50] + "...",
-                "Item D Extraído": item_d if item_d else "-",
-                "Status": status
-            })
+            # --- LISTAGEM TABULAR SIMPLES (PREVIEW) ---
+            st.divider()
+            st.subheader("📋 Preview dos 10 primeiros (Baseado na descoberta)")
+            
+            lista_preview = []
+            for item in items[:10]:
+                # Tenta pegar tags comuns na "força bruta" para preencher a tabela
+                dados = {}
+                for child in item:
+                    dados[child.tag] = child.text
+                lista_preview.append(dados)
+            
+            st.dataframe(pd.DataFrame(lista_preview))
 
-        df = pd.DataFrame(resultados_lote)
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total", len(df))
-        c2.metric("Com Item D (Regex pegou)", len(df[df['Item D Extraído'] != '-']))
-        c3.metric("Sucesso Parser", len(df[df['Status'] == 'SUCESSO']))
-
-        st.dataframe(df, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erro fatal: {e}")
