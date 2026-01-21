@@ -16,6 +16,12 @@ RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2
 # Camada 2: Ranges Numéricos (19 TIL 20)
 RE_NUM_RANGE = re.compile(r'(\d{1,2})\s+TIL\s+(\d{1,2})')
 
+# Camada 3: Mês Isolado
+RE_MONTH = re.compile(r'\b(' + '|'.join(MONTHS_LIST) + r')\b')
+
+# Camada 4: Números Isolados
+RE_NUM = re.compile(r'\b(\d{1,2})\b')
+
 def parse_notam_date(date_str):
     try:
         if not date_str or len(str(date_str)) != 10: return None
@@ -80,14 +86,16 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     week_map = {"MON":0, "TUE":1, "WED":2, "THU":3, "FRI":4, "SAT":5, "SUN":6}
     resultado = []
     
+    # Encontra os delimitadores de horário
     matches = list(RE_HORARIO_SEGMENT.finditer(text))
     if not matches: return []
 
     last_end = 0
     y = dt_b.year
     
-    # MEMÓRIA DE CONTEXTO: Começa com o mês do Item B
-    ultimo_mes_visto = dt_b.strftime("%b").upper()
+    # --- MEMÓRIA DE CONTEXTO ---
+    # Começa com o mês do Item B. Essa variável persiste por todo o NOTAM.
+    contexto_mes = dt_b.strftime("%b").upper()
 
     for match in matches:
         horario_str = match.group(1)
@@ -96,7 +104,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         
         if not segmento: continue
 
-        # 1. Filtro Dias
+        # 1. Filtro Dias da Semana (Remove do texto para não confundir)
         dias_filtro = set()
         if any(d in segmento for d in week_map):
             for dia, idx in week_map.items():
@@ -105,85 +113,83 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     segmento = segmento.replace(dia, "") 
         
         segmento_limpo = segmento.strip()
-
-        # FASE A: Ranges Completos (Atualizam a memória do mês)
-        for m in RE_FULL_RANGE.finditer(segmento_limpo):
-            m1, d1, m2, d2 = m.groups()
-            try:
-                ini_dt = datetime.strptime(f"{y} {m1} {d1}", "%Y %b %d")
-                fim_dt = datetime.strptime(f"{y} {m2} {d2}", "%Y %b %d")
-                
-                ini_dt = ajustar_ano(ini_dt, dt_b)
-                if fim_dt.month < ini_dt.month: fim_dt = fim_dt.replace(year=ini_dt.year + 1)
-                else: fim_dt = fim_dt.replace(year=ini_dt.year)
-
-                resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
-                
-                # Atualiza a memória para o último mês usado
-                ultimo_mes_visto = m2 
-            except: pass
         
-        segmento_limpo = RE_FULL_RANGE.sub(" ", segmento_limpo)
+        # --- LISTA DE EVENTOS ---
+        # Vamos mapear tudo o que acontece neste segmento em ordem de posição
+        eventos = [] # Tuplas: (posicao_inicio, tipo, dados)
 
-        # FASE B: Processar por Mês
-        found_months = []
-        for mon in MONTHS_LIST:
-            for m in re.finditer(mon, segmento_limpo):
-                found_months.append((m.start(), mon))
-        found_months.sort()
+        # A. Ranges Completos (DEC 31 TIL JAN 02)
+        # Importante: Substituímos por espaços para manter os índices dos outros elementos
+        for m in RE_FULL_RANGE.finditer(segmento_limpo):
+            eventos.append((m.start(), 'FULL_RANGE', m.groups()))
+            # Mascara o trecho encontrado com espaços para não ser pego pelas outras regex
+            segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        # --- CORREÇÃO DO ERRO ---
-        # Se não achou mês neste segmento, INJETA o último mês visto
-        if not found_months:
-            found_months = [(0, ultimo_mes_visto)]
-        else:
-            # Se achou meses, atualiza a memória para o último encontrado nesta lista
-            ultimo_mes_visto = found_months[-1][1]
+        # B. Ranges Parciais (10 TIL 20)
+        for m in RE_NUM_RANGE.finditer(segmento_limpo):
+            eventos.append((m.start(), 'PART_RANGE', m.groups()))
+            segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        for i, (idx, mon) in enumerate(found_months):
-            start_slice = idx + len(mon) if idx > 0 else 0 
-            # Se for o mês injetado (indice 0 e não está no texto original), começamos do 0
-            if idx == 0 and mon not in segmento_limpo[0:5]: # Verificação simples se o mês realmente existe no texto
-                 start_slice = 0
+        # C. Meses Isolados (JAN)
+        for m in RE_MONTH.finditer(segmento_limpo):
+            eventos.append((m.start(), 'MONTH', m.group(1)))
+            segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-            if i + 1 < len(found_months):
-                end_slice = found_months[i+1][0]
-            else:
-                end_slice = len(segmento_limpo)
+        # D. Números Isolados (05)
+        for m in RE_NUM.finditer(segmento_limpo):
+            eventos.append((m.start(), 'NUM', m.group(1)))
+
+        # Ordena eventos pela posição no texto
+        eventos.sort(key=lambda x: x[0])
+
+        # --- PROCESSAMENTO LINEAR ---
+        for _, tipo, dados in eventos:
+            if tipo == 'MONTH':
+                # Atualiza a memória de contexto
+                contexto_mes = dados
             
-            chunk = segmento_limpo[start_slice:end_slice]
-            
-            # Ranges Parciais
-            for m in RE_NUM_RANGE.finditer(chunk):
-                d1, d2 = m.groups()
+            elif tipo == 'FULL_RANGE':
+                m1, d1, m2, d2 = dados
                 try:
-                    mes_obj = datetime.strptime(mon, "%b")
+                    ini_dt = datetime.strptime(f"{y} {m1} {d1}", "%Y %b %d")
+                    fim_dt = datetime.strptime(f"{y} {m2} {d2}", "%Y %b %d")
+                    
+                    ini_dt = ajustar_ano(ini_dt, dt_b)
+                    # Lógica de virada de ano específica para range completo
+                    if fim_dt.month < ini_dt.month: fim_dt = fim_dt.replace(year=ini_dt.year + 1)
+                    else: fim_dt = fim_dt.replace(year=ini_dt.year)
+
+                    resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
+                    # Atualiza contexto para o mês final do range
+                    contexto_mes = m2
+                except: pass
+
+            elif tipo == 'PART_RANGE':
+                d1, d2 = dados
+                try:
+                    mes_obj = datetime.strptime(contexto_mes, "%b")
                     ini_dt = datetime(y, mes_obj.month, int(d1))
                     fim_dt = datetime(y, mes_obj.month, int(d2))
                     
                     ini_dt = ajustar_ano(ini_dt, dt_b)
                     fim_dt = ajustar_ano(fim_dt, dt_b)
-
+                    
                     resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                 except: pass
-            
-            chunk_sem_ranges = RE_NUM_RANGE.sub(" ", chunk)
 
-            # Números Soltos
-            numeros = re.findall(r'\d+', chunk_sem_ranges)
-            for num in numeros:
-                if len(num) > 2: continue
+            elif tipo == 'NUM':
+                d1 = dados
                 try:
-                    mes_obj = datetime.strptime(mon, "%b")
-                    dt_base = datetime(y, mes_obj.month, int(num))
+                    mes_obj = datetime.strptime(contexto_mes, "%b")
+                    dt_base = datetime(y, mes_obj.month, int(d1))
                     dt_base = ajustar_ano(dt_base, dt_b)
                     
                     if not dias_filtro or dt_base.weekday() in dias_filtro:
                         resultado.extend(extrair_horarios(horario_str, dt_base))
                 except: pass
 
+    # Filtro Final e Ordenação
     resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=1)]
-    
     unique_res = []
     seen = set()
     for r in resultado_final:
