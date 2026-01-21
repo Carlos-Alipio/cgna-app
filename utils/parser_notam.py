@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta
 
-# --- CONFIGURAÇÕES DE PERFORMANCE ---
+# --- CONFIGURAÇÕES ---
 MAX_DAYS_PROJECT = 90
 
 # Regex pré-compiladas
@@ -12,7 +12,6 @@ RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2
 RE_PARTIAL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+(\d{1,2})')
 RE_SINGLE_DATE = re.compile(r'([A-Z]{3})\s+(\d{1,2})$')
 
-# Lista de meses para iteração rápida
 MONTHS_LIST = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 def parse_notam_date(date_str):
@@ -54,6 +53,23 @@ def extrair_horarios(texto_horario, base_date):
         except: continue
     return slots
 
+def ajustar_ano(dt_alvo, dt_inicio_vigencia):
+    """
+    Se a data lida for muito anterior à data de início da vigência (B),
+    assume que é do ano seguinte.
+    Ex: Item B = DEC 2025. Data lida = JAN 01 (assume 2025).
+    JAN < DEC -> Corrige para JAN 2026.
+    """
+    # Se o mês alvo é menor que o mês de início (Ex: Jan < Dec)
+    # E o ano é o mesmo, soma 1 ano.
+    if dt_alvo.month < dt_inicio_vigencia.month and dt_alvo.year == dt_inicio_vigencia.year:
+        return dt_alvo.replace(year=dt_alvo.year + 1)
+    
+    # Caso extra: Se a data for menor que o inicio, mas no mesmo mês/ano (ex: dia 01 vs dia 19)
+    # Geralmente mantemos, pois pode ser erro de digitação, 
+    # mas o parser vai filtrar depois se estiver fora da vigência.
+    return dt_alvo
+
 def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     week_map = {"MON":0, "TUE":1, "WED":2, "THU":3, "FRI":4, "SAT":5, "SUN":6}
     resultado = []
@@ -71,7 +87,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         
         if not segmento: continue
 
-        # 1. Filtro de Dias da Semana
+        # 1. Filtro Dias da Semana
         dias_filtro = set()
         if any(d in segmento for d in week_map):
             for dia, idx in week_map.items():
@@ -80,15 +96,13 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     segmento = segmento.replace(dia, "") 
         
         segmento_limpo = segmento.strip()
-        # Se o segmento ficou vazio (ex: "MON TUE 1000-1200"), assume intervalo completo
-        # Mas cuidado, pode ser continuação de lista anterior.
-        
         processed_segment = False
 
-        # 2. Tenta Ranges (TIL) - Prioridade Alta
+        # 2. Tenta Ranges (TIL)
         ini_dt, fim_dt = None, None
         m_full = RE_FULL_RANGE.search(segmento_limpo)
         m_part = RE_PARTIAL_RANGE.search(segmento_limpo)
+        m_single = RE_SINGLE_DATE.search(segmento_limpo) # JAN 10 (Sem TIL)
 
         if m_full or m_part:
             processed_segment = True
@@ -103,7 +117,14 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     fim_dt = datetime.strptime(f"{y} {m1} {d2}", "%Y %b %d")
 
                 if ini_dt and fim_dt:
-                    if fim_dt < ini_dt: fim_dt = fim_dt.replace(year=y+1)
+                    # CORREÇÃO DE ANO
+                    ini_dt = ajustar_ano(ini_dt, dt_b)
+                    # O fim deve ser checado em relação ao início corrigido
+                    if fim_dt.month < ini_dt.month: 
+                        fim_dt = fim_dt.replace(year=ini_dt.year + 1)
+                    else:
+                        fim_dt = fim_dt.replace(year=ini_dt.year)
+
                     if (fim_dt - ini_dt).days > MAX_DAYS_PROJECT:
                         fim_dt = ini_dt + timedelta(days=MAX_DAYS_PROJECT)
 
@@ -114,68 +135,56 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         curr += timedelta(days=1)
             except: pass
         
-        # 3. Se não achou TIL, tenta LISTA DE DATAS (JAN 05 08 10)
+        # 3. Lista de Datas (JAN 05 08...)
         if not processed_segment:
-            # Procura ocorrências de meses no segmento
             found_months = []
             for mon in MONTHS_LIST:
                 idx = segmento_limpo.find(mon)
-                if idx != -1:
-                    found_months.append((idx, mon))
+                if idx != -1: found_months.append((idx, mon))
             
-            # Ordena pela posição no texto
             found_months.sort()
             
             if found_months:
                 processed_segment = True
-                # Itera pelos meses encontrados no segmento (para casos como SBPA: JAN... FEB... MAR...)
                 for i, (idx, mon) in enumerate(found_months):
-                    # O texto deste mês vai do índice dele até o próximo mês ou fim da string
                     start_slice = idx + len(mon)
                     end_slice = found_months[i+1][0] if i + 1 < len(found_months) else len(segmento_limpo)
-                    
                     nums_str = segmento_limpo[start_slice:end_slice]
                     
-                    # Pega todos os números soltos
                     dias_list = []
                     for token in nums_str.replace(",", " ").split():
                         if token.isdigit() and len(token) <= 2:
                             dias_list.append(int(token))
                     
-                    # Gera os slots
                     try:
                         mes_obj = datetime.strptime(mon, "%b")
                         for d in dias_list:
                             dt_base = datetime(y, mes_obj.month, d)
-                            # Ajuste simples de ano (se mês é JAN e dt_b é NOV, provavel ser ano seguinte)
-                            if dt_base.month < dt_b.month and (dt_b.month - dt_base.month) > 6:
-                                dt_base = dt_base.replace(year=y+1)
-                            elif dt_base.month > dt_b.month and (dt_base.month - dt_b.month) > 6:
-                                dt_base = dt_base.replace(year=y-1) # Raro
+                            
+                            # CORREÇÃO DE ANO
+                            dt_base = ajustar_ano(dt_base, dt_b)
                             
                             if not dias_filtro or dt_base.weekday() in dias_filtro:
                                 resultado.extend(extrair_horarios(horario_str, dt_base))
                     except: pass
             
-            # 4. Caso Sobra: Números sem mês no início (herda do mês do item B ou anterior?)
-            # Para SBRJ: JAN 27 28 -> Cai no 'found_months' acima.
-            # Para caso bizarro onde começa só com número: "10 12 1000-1200"
+            # 4. Caso Sobra (Só números, assume mês do B)
             else:
-                # Se só tem números
                 tokens = segmento_limpo.split()
                 if all(t.isdigit() for t in tokens) and len(tokens) > 0:
-                     # Assume mês do item B
                     try:
                         for t in tokens:
                             dt_base = datetime(y, dt_b.month, int(t))
+                            dt_base = ajustar_ano(dt_base, dt_b) # Aplica correção aqui tb
                             if not dias_filtro or dt_base.weekday() in dias_filtro:
                                 resultado.extend(extrair_horarios(horario_str, dt_base))
                     except: pass
 
-    return resultado
+    # Filtro Final: Remove datas fora da vigência global (B e C)
+    resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=1)]
+    return resultado_final
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
-    """Função Mestre"""
     if not item_d_text or not item_d_text.strip(): return []
 
     dt_b = parse_notam_date(item_b_raw)
@@ -187,22 +196,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
-    
-    # Limpezas
     text = RE_BARRA_DATA.sub(r'\1', text)
     text = RE_BARRA_DIA.sub(r'\1', text)
-    # Remove caractere invisível comum em copy-paste
     text = text.replace(u'\xa0', u' ')
 
-    # 1. TENTA SEGMENTAÇÃO (Resolve SBMQ, SBRJ, SBPA, SBGR)
     if RE_HORARIO_SEGMENT.search(text):
         res = processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao)
         if res: return res
 
-    # 2. FALLBACKS
+    # FALLBACKS SIMPLES (DLY, WEEK, ETC)
     week_map = {"MON":0, "TUE":1, "WED":2, "THU":3, "FRI":4, "SAT":5, "SUN":6}
 
-    # DLY
     if "DLY" in text or "DAILY" in text:
         horarios_str = text.replace("DLY", "").replace("DAILY", "").strip()
         dias_exc = set()
@@ -212,7 +216,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             exc_text = parts[1].strip()
             for k, v in week_map.items():
                 if k in exc_text: dias_exc.add(v)
-        
         res_dly = []
         curr = dt_b
         while curr <= dt_c:
@@ -221,7 +224,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             curr += timedelta(days=1)
         return res_dly
 
-    # Ranges Semana
     m_week = re.search(r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)', text)
     if m_week:
         start, end = week_map[m_week.group(1)], week_map[m_week.group(2)]
@@ -235,7 +237,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             curr += timedelta(days=1)
         return res_week
 
-    # Dias Soltos
     if any(d in text for d in week_map):
         alvo = {week_map[d] for d in week_map if d in text}
         horario = text
