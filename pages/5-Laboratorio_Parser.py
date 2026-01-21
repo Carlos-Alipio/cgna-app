@@ -107,7 +107,6 @@ with tab_lote:
         
         # 1. Monta a URL
         if brasil_todo:
-            # Sem filtro de icaocode = Brasil todo
             url_full = f"{API_URL}?apiKey={API_KEY}&apiPass={API_PASS}&area=notam"
         else:
             locais = icaos_teste.replace(" ", "")
@@ -116,7 +115,7 @@ with tab_lote:
         status_text.info("📡 Conectando ao AISWEB (Aguarde, baixando XML grande)...")
         
         try:
-            # Aumentei o timeout para 60s pois o XML do Brasil todo é pesado
+            # Timeout alto para XML grande
             response = requests.get(url_full, timeout=60)
             
             if response.status_code != 200:
@@ -125,7 +124,12 @@ with tab_lote:
                 
             # 2. Parse do XML
             status_text.info("Processando XML...")
-            root = ET.fromstring(response.content)
+            try:
+                root = ET.fromstring(response.content)
+            except ET.ParseError:
+                st.error("Erro ao ler o XML retornado pelo AISWEB. O arquivo pode estar corrompido ou incompleto.")
+                st.stop()
+
             items = root.findall("notam")
             total_items = len(items)
             
@@ -145,17 +149,25 @@ with tab_lote:
                     return dt.strftime("%y%m%d%H%M")
                 except: return "2501010000"
             
+            # --- FUNÇÃO DE EXTRAÇÃO SEGURA (CORREÇÃO DO ERRO) ---
+            def safe_get_text(xml_item, tag_name):
+                found = xml_item.find(tag_name)
+                if found is not None and found.text:
+                    return found.text
+                return ""
+
             # 3. Loop de Análise
             for i, item in enumerate(items):
-                # Atualiza barra a cada 5% para não travar a UI
+                # Atualiza barra a cada 5%
                 if i % (total_items // 20 + 1) == 0:
                     progress_bar.progress((i + 1) / total_items)
                 
-                notam_id = item.find("notam_id").text if item.find("notam_id") is not None else "?"
-                loc = item.find("loc").text if item.find("loc") is not None else "?"
-                dt_ini_xml = item.find("dt_ini").text 
-                dt_fim_xml = item.find("dt_fim").text
-                texto_full = item.find("texto").text if item.find("texto") is not None else ""
+                # --- USO DA EXTRAÇÃO SEGURA ---
+                notam_id = safe_get_text(item, "notam_id")
+                loc = safe_get_text(item, "loc")
+                dt_ini_xml = safe_get_text(item, "dt_ini")
+                dt_fim_xml = safe_get_text(item, "dt_fim")
+                texto_full = safe_get_text(item, "texto")
                 
                 # Regex para achar Item D
                 match_d = re.search(r'(?:^|\s)D\)\s*(.*?)(?=\s*[E-G]\)|\s*$)', texto_full, re.DOTALL)
@@ -166,7 +178,7 @@ with tab_lote:
                 
                 if item_d_extraido:
                     # Filtra falsos positivos comuns (ex: "NIL")
-                    if item_d_extraido.upper() in ["NIL", "NONE"]:
+                    if item_d_extraido.upper() in ["NIL", "NONE", ""]:
                         status_analise = "IGNORADO (NIL)"
                     else:
                         try:
@@ -203,8 +215,7 @@ with tab_lote:
             # Filtra Falhas Reais
             df_falhas = df_lote[df_lote['Status'].isin(["FALHA", "ERRO CÓDIGO"])]
             
-            # Remove duplicatas de texto para facilitar a análise
-            # (Muitos NOTAMs repetem o mesmo texto em aeroportos diferentes)
+            # Remove duplicatas de texto
             if not df_falhas.empty:
                 df_falhas_unicas = df_falhas.drop_duplicates(subset=['Item D'])
             else:
@@ -230,7 +241,7 @@ with tab_lote:
                     }
                 )
             else:
-                st.success("🎉 Incrível! Nenhum erro encontrado em todo o Brasil.")
+                st.success("🎉 Incrível! Nenhum erro encontrado.")
             
         except Exception as e:
             st.error(f"Erro fatal: {e}")
