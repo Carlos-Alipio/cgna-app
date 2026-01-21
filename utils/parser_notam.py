@@ -6,33 +6,25 @@ MAX_DAYS_PROJECT = 90
 
 # Dicionário de Meses (Inglês + Português)
 MONTH_MAP = {
-    # Inglês
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
-    # Português
     "FEV": 2, "ABR": 4, "MAI": 5, "AGO": 8, "SET": 9, "OUT": 10, "DEZ": 12
 }
 
 # Dicionário de Dias da Semana (Inglês + Português)
 WEEK_MAP = {
-    # Inglês
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
-    # Português
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
 }
 
-# --- REGEX ---
-# Constrói regex dinâmica com todas as chaves (MON|TUE|SEG|TER...)
 days_pattern = '|'.join(WEEK_MAP.keys())
 
+# --- REGEX ---
 RE_HORARIO_SEGMENT = re.compile(r'(\d{4}-\d{4}|SR-SS|SR-\d{4}|\d{4}-SS)')
 RE_BARRA_DATA = re.compile(r'(\d{1,2})/\d{1,2}')
 RE_BARRA_DIA = re.compile(r'(' + days_pattern + r')/(' + days_pattern + r')')
 
-# Range de Dias da Semana (TUE TIL SAT)
 RE_WEEK_RANGE = re.compile(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b')
-
-# Ranges de Datas
 RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2})')
 RE_NUM_RANGE = re.compile(r'(\d{1,2})\s+TIL\s+(\d{1,2})')
 RE_MONTH = re.compile(r'\b(' + '|'.join(MONTH_MAP.keys()) + r')\b')
@@ -96,67 +88,71 @@ def gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str):
 
 def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     resultado = []
-    
     matches = list(RE_HORARIO_SEGMENT.finditer(text))
     if not matches: return []
 
     last_end = 0
     y = dt_b.year
     contexto_mes = dt_b.strftime("%b").upper()
+    
+    # Cache para "Horários Duplos" (ex: JAN 10 0900-1200 1400-1600)
+    # Se o segmento atual for vazio, usamos o texto do segmento anterior
+    ultimo_segmento_valido = None
 
     for match in matches:
         horario_str = match.group(1)
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        if not segmento: continue
+        # --- LÓGICA DE CACHE PARA HORÁRIO DUPLO ---
+        # Se o segmento não tiver nem números nem meses, provavelmente é continuação do anterior
+        tem_conteudo = (re.search(r'\d', segmento) or re.search(r'[A-Z]{3}', segmento))
+        
+        if not tem_conteudo and ultimo_segmento_valido:
+            # Reutiliza o texto anterior (mesmas datas) mas com o NOVO horário
+            segmento = ultimo_segmento_valido
+        elif tem_conteudo:
+            # Atualiza o cache
+            ultimo_segmento_valido = segmento
+        elif not tem_conteudo and not ultimo_segmento_valido:
+            # Caso raro: começa com horário sem data nenhuma? Ignora.
+            continue
+            
+        # ------------------------------------------
 
-        # --- FILTRO DE DIAS DA SEMANA (AGORA COM RANGE) ---
         dias_filtro = set()
-
-        # 1. Detecta Ranges (TUE TIL SAT)
+        
+        # 1. Ranges Dias Semana
         for m_wr in RE_WEEK_RANGE.finditer(segmento):
             d1_str, d2_str = m_wr.groups()
             s_idx = WEEK_MAP[d1_str]
             e_idx = WEEK_MAP[d2_str]
-            
-            # Se inicio <= fim (TUE -> SAT): 1, 2, 3, 4, 5
-            if s_idx <= e_idx:
-                dias_filtro.update(range(s_idx, e_idx + 1))
-            else: # Wrap (FRI -> MON): 4, 5, 6, 0
-                dias_filtro.update(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
-        
-        # Remove os ranges do texto para não atrapalhar
+            if s_idx <= e_idx: dias_filtro.update(range(s_idx, e_idx + 1))
+            else: dias_filtro.update(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
         segmento = RE_WEEK_RANGE.sub(" ", segmento)
 
-        # 2. Detecta Dias Soltos (MON, WED)
+        # 2. Dias Soltos Semana
         for dia_nome, dia_idx in WEEK_MAP.items():
-            # Usa Regex para garantir palavra inteira (evita deletar substring se houver colisões raras)
             if re.search(r'\b' + dia_nome + r'\b', segmento):
                 dias_filtro.add(dia_idx)
                 segmento = re.sub(r'\b' + dia_nome + r'\b', " ", segmento)
         
         segmento_limpo = segmento.strip()
         
-        # --- PROCESSAMENTO LINEAR (SCANNER) ---
+        # --- PROCESSAMENTO LINEAR ---
         eventos = []
-
-        # A. Ranges Completos (DEC 31 TIL JAN 02)
         for m in RE_FULL_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'FULL_RANGE', m.groups()))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        # B. Ranges Parciais (10 TIL 20)
         for m in RE_NUM_RANGE.finditer(segmento_limpo):
             eventos.append((m.start(), 'PART_RANGE', m.groups()))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        # C. Meses Isolados
         for m in RE_MONTH.finditer(segmento_limpo):
             eventos.append((m.start(), 'MONTH', m.group(1)))
             segmento_limpo = segmento_limpo[:m.start()] + " " * (m.end() - m.start()) + segmento_limpo[m.end():]
 
-        # D. Números Isolados
         for m in RE_NUM.finditer(segmento_limpo):
             eventos.append((m.start(), 'NUM', m.group(1)))
 
@@ -177,7 +173,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         ini_dt = ajustar_ano(ini_dt, dt_b)
                         if fim_dt.month < ini_dt.month: fim_dt = fim_dt.replace(year=ini_dt.year + 1)
                         else: fim_dt = fim_dt.replace(year=ini_dt.year)
-
                         resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                         contexto_mes = m2
                 except: pass
@@ -191,7 +186,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         fim_dt = datetime(y, mes_num, int(d2))
                         ini_dt = ajustar_ano(ini_dt, dt_b)
                         fim_dt = ajustar_ano(fim_dt, dt_b)
-                        
                         resultado.extend(gerar_dias_entre(ini_dt, fim_dt, dias_filtro, horario_str))
                 except: pass
 
@@ -202,7 +196,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     if mes_num:
                         dt_base = datetime(y, mes_num, int(d1))
                         dt_base = ajustar_ano(dt_base, dt_b)
-                        
                         if not dias_filtro or dt_base.weekday() in dias_filtro:
                             resultado.extend(extrair_horarios(horario_str, dt_base))
                 except: pass
@@ -238,7 +231,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         res = processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao)
         if res: return res
 
-    # FALLBACKS (DLY, etc)
+    # FALLBACKS
     if "DLY" in text or "DAILY" in text:
         horarios_str = text.replace("DLY", "").replace("DAILY", "").strip()
         dias_exc = set()
@@ -246,7 +239,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             parts = horarios_str.split("EXC")
             horarios_str = parts[0].strip()
             exc_text = parts[1].strip()
-            for k, v in WEEK_MAP.items(): # Usa WEEK_MAP global
+            for k, v in WEEK_MAP.items():
                 if k in exc_text: dias_exc.add(v)
         return gerar_dias_entre(dt_b, dt_c, dias_exc, horarios_str)
 
@@ -256,9 +249,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         e_idx = WEEK_MAP[m_week.group(2)]
         validos = set(range(s_idx, e_idx + 1)) if s_idx <= e_idx else set(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
         horario = text.replace(m_week.group(0), "").strip()
-        
-        # Corrigido loop de fallback para usar gerar_dias_entre filtrado
-        # Mas para manter simples e compatível com lógica antiga:
         res_week = []
         curr = dt_b
         while curr <= dt_c:
