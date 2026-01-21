@@ -10,7 +10,7 @@ st.markdown("Ferramenta para validação do algoritmo usando dados reais do **Ba
 tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL
+# ABA 1: TESTE MANUAL (MANTIDA)
 # ==============================================================================
 with tab_manual:
     c1, c2 = st.columns([1, 2])
@@ -53,13 +53,13 @@ with tab_manual:
             st.error(f"Erro: {e}")
 
 # ==============================================================================
-# ABA 2: AUDITORIA DO BANCO DE DADOS (CORRIGIDA)
+# ABA 2: AUDITORIA DO BANCO DE DADOS (COM MEMÓRIA PERSISTENTE)
 # ==============================================================================
 with tab_banco:
     st.subheader("🕵️ Auditoria: Supabase")
-    st.markdown("Verificação de NOTAMs com Item D, corrigindo datas brutas do banco.")
-
-    if st.button("🔄 Carregar do Banco", type="primary"):
+    
+    # Botão para carregar (apenas busca os dados e salva na memória)
+    if st.button("🔄 Carregar/Atualizar Dados do Banco", type="primary"):
         with st.spinner("Carregando e processando datas..."):
             df_full = db_manager.carregar_notams()
             
@@ -67,7 +67,6 @@ with tab_banco:
                 st.warning("Banco vazio.")
                 st.stop()
             
-            # Filtra apenas quem tem Item D
             col_d = 'd'
             if col_d not in df_full.columns:
                 st.error("Coluna 'd' não encontrada.")
@@ -77,50 +76,27 @@ with tab_banco:
             df_analise = df_analise[~df_analise[col_d].astype(str).str.upper().isin(["NIL", "NONE"])]
 
             total = len(df_analise)
-            st.success(f"Analisando {total} registros...")
-            
             progress_bar = st.progress(0)
             resultados = []
 
-            # --- FUNÇÃO DE CORREÇÃO DE DATA ---
+            # Função de correção de data
             def parse_db_date(val):
-                """
-                Força a interpretação correta do formato NOTAM (YYMMDDHHMM)
-                mesmo que o banco traga como número ou string.
-                """
                 val_str = str(val).strip()
-                # Remove pontuação se houver (ex: 25-12...)
                 val_clean = val_str.replace("-", "").replace(":", "").replace(" ", "")
-                
-                # Se for formato YYMMDDHHMM (10 digitos)
-                if len(val_clean) == 10 and val_clean.isdigit():
-                    return val_clean # Retorna string limpa para o parser usar
-                
-                # Se for timestamp do pandas, converte
-                if isinstance(val, (datetime, pd.Timestamp)):
-                    return val.strftime("%y%m%d%H%M")
-                    
-                return "2601010000" # Fallback seguro (2026) se falhar
+                if len(val_clean) == 10 and val_clean.isdigit(): return val_clean
+                if isinstance(val, (datetime, pd.Timestamp)): return val.strftime("%y%m%d%H%M")
+                return "2601010000"
 
-            # --- LOOP DE ANÁLISE ---
+            # Loop de Análise
             for idx, row in enumerate(df_analise.iterrows()):
                 r = row[1]
-                
-                # Barra de progresso otimizada
-                if idx % 50 == 0:
-                    progress_bar.progress(min((idx + 1) / total, 1.0))
+                if idx % 50 == 0: progress_bar.progress(min((idx + 1) / total, 1.0))
                 
                 item_d = str(r[col_d]).strip()
                 loc = r.get('loc', 'SB??')
                 n_notam = r.get('n', '?')
-                
-                # Pega valores brutos do banco
-                raw_b = r.get('b', '')
-                raw_c = r.get('c', '')
-                
-                # Sanitiza para o formato que o parser entende (YYMMDDHHMM)
-                str_b = parse_db_date(raw_b)
-                str_c = parse_db_date(raw_c)
+                str_b = parse_db_date(r.get('b', ''))
+                str_c = parse_db_date(r.get('c', ''))
                 
                 status = "N/A"
                 detalhe = "-"
@@ -139,20 +115,16 @@ with tab_banco:
                     status = "ERRO CÓDIGO"
                     detalhe = str(e)
                 
-                # Tenta converter para datetime real APENAS para exibição na tabela (Visual)
-                try:
-                    view_b = datetime.strptime(str_b, "%y%m%d%H%M")
+                try: view_b = datetime.strptime(str_b, "%y%m%d%H%M")
                 except: view_b = None
-                
-                try:
-                    view_c = datetime.strptime(str_c, "%y%m%d%H%M")
+                try: view_c = datetime.strptime(str_c, "%y%m%d%H%M")
                 except: view_c = None
 
                 resultados.append({
                     "LOC": loc,
                     "NOTAM": n_notam,
                     "Item D": item_d,
-                    "Início (B)": view_b, # Objeto datetime para a coluna ficar bonita
+                    "Início (B)": view_b,
                     "Fim (C)": view_c,
                     "Status": status,
                     "Detalhe": detalhe
@@ -160,35 +132,54 @@ with tab_banco:
             
             progress_bar.progress(100)
             
-            # --- EXIBIÇÃO ---
-            df_res = pd.DataFrame(resultados)
-            
-            st.divider()
-            
-            k1, k2, k3 = st.columns(3)
-            falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
-            sucessos = df_res[df_res['Status'] == 'SUCESSO']
-            
-            k1.metric("Total", total)
-            k2.metric("Sucessos", len(sucessos))
-            k3.metric("Falhas", len(falhas), delta_color="inverse")
-            
-            filtro = st.radio("Visualizar:", ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], horizontal=True)
-            
-            if filtro == "🚨 Apenas Falhas":
-                df_show = falhas
-            elif filtro == "✅ Apenas Sucessos":
-                df_show = sucessos
-            else:
-                df_show = df_res
-            
-            st.dataframe(
-                df_show,
-                use_container_width=True,
-                column_config={
-                    "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
-                    "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
-                    "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim", format="DD/MM/YYYY HH:mm"),
-                },
-                height=600
-            )
+            # SALVA NO SESSION STATE (MEMÓRIA)
+            st.session_state['auditoria_resultados'] = pd.DataFrame(resultados)
+            st.rerun() # Recarrega a página para exibir os dados salvos
+
+    # --- EXIBIÇÃO FORA DO BOTÃO (LÊ DA MEMÓRIA) ---
+    if 'auditoria_resultados' in st.session_state:
+        df_res = st.session_state['auditoria_resultados']
+        
+        st.divider()
+        st.success(f"Dados carregados na memória: {len(df_res)} registros.")
+        
+        # Métricas
+        falhas = df_res[df_res['Status'].isin(['FALHA', 'ERRO CÓDIGO'])]
+        sucessos = df_res[df_res['Status'] == 'SUCESSO']
+        
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Total", len(df_res))
+        k2.metric("Sucessos", len(sucessos))
+        k3.metric("Falhas", len(falhas), delta_color="inverse")
+        
+        # Filtros (Agora funcionam porque o df_res persiste)
+        filtro = st.radio(
+            "Visualizar:", 
+            ["🚨 Apenas Falhas", "✅ Apenas Sucessos", "📄 Tudo"], 
+            horizontal=True,
+            index=2 # Padrão: Tudo
+        )
+        
+        if filtro == "🚨 Apenas Falhas":
+            df_show = falhas
+        elif filtro == "✅ Apenas Sucessos":
+            df_show = sucessos
+        else:
+            df_show = df_res
+        
+        st.dataframe(
+            df_show,
+            use_container_width=True,
+            column_config={
+                "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
+                "Detalhe": st.column_config.TextColumn("Resultado do Robô", width="medium"),
+                "Início (B)": st.column_config.DatetimeColumn("Vigência Ini", format="DD/MM/YYYY HH:mm"),
+                "Fim (C)": st.column_config.DatetimeColumn("Vigência Fim", format="DD/MM/YYYY HH:mm"),
+            },
+            height=600
+        )
+        
+        csv = df_show.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Baixar CSV", data=csv, file_name="auditoria_parser.csv", mime="text/csv")
+    else:
+        st.info("👆 Clique no botão acima para carregar a auditoria.")
