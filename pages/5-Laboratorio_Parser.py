@@ -114,8 +114,8 @@ with tab_banco:
             r = row[1]
             
             # Atualiza barra
-            if idx % (total_analise // 20 + 1) == 0:
-                progress_bar.progress((idx + 1) / total_analise)
+            if idx % 50 == 0:
+                progress_bar.progress(min((idx + 1) / total_analise, 1.0))
             
             # Dados
             item_d_text = str(r[col_d]).strip()
