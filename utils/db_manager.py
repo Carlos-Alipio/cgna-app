@@ -3,7 +3,7 @@ import pandas as pd
 from sqlalchemy import text
 from datetime import datetime, timedelta
 
-# --- CONEXÃO CENTRALIZADA ---
+# --- CONEXÃO ---
 def get_connection():
     return st.connection("supabase", type="sql")
 
@@ -12,50 +12,87 @@ def salvar_notams(df):
     conn = get_connection()
     
     # ==============================================================================
-    # 🛠️ HOOK DE CORREÇÃO: REGRA HÍBRIDA (PERM EM C **OU** CONTEXTO EM D)
+    # 🛠️ HOOK DE CORREÇÃO: TRATAMENTO DE 'PERM' vindo do CSV
     # ==============================================================================
     try:
+        # 1. Normalização de Nomes de Colunas
+        # O CSV pode vir como "Data Inicial"/"Data Final" ou "b"/"c". Vamos padronizar.
+        mapa_colunas = {
+            'Data Inicial': 'b',
+            'Data Final': 'c',
+            'Texto': 'd',
+            'Localidade': 'loc',
+            'NOTAM': 'n'
+        }
+        df = df.rename(columns=mapa_colunas)
+
+        # 2. Conversão da Data de Início (b)
         df['b_dt'] = pd.to_datetime(df['b'], errors='coerce')
         
+        # 3. Função de Correção Linha a Linha
         def corrigir_data_fim(row):
-            data_c_raw = str(row.get('c', '')).upper()
-            texto_d = str(row.get('d', '')).upper()
+            # Pega valores brutos como string maiúscula
+            val_c = str(row.get('c', '')).upper().strip()
+            texto_d = str(row.get('d', '')).upper().strip()
             dt_inicio = row['b_dt']
             
+            # Se não tem data de início válida, retorna o que veio
             if pd.isna(dt_inicio):
-                return row['c'] 
+                return row.get('c')
             
-            # 1. Verifica PERM no campo C (Sua regra principal)
-            tem_perm_em_c = "PERM" in data_c_raw
+            # --- VERIFICAÇÃO DE PERM ---
+            # A. Está escrito "PERM" na coluna de Data Final?
+            is_perm_c = "PERM" in val_c
             
-            # 2. Verifica Gatilhos no Texto D (Para recuperar casos como SBRP)
-            gatilhos = ["REF AIP", "REF: AIP", "AD 2", "PERM", "AIP AD"]
-            tem_perm_no_texto = any(g in texto_d for g in gatilhos)
+            # B. Está escrito REF AIP ou PERM no Texto? (Backup)
+            gatilhos = ["REF: AIP", "REF AIP", "AD 2", "PERM", "AIP AD"]
+            is_perm_text = any(g in texto_d for g in gatilhos)
             
-            # Se tiver PERM no C OU indicativo forte no texto -> 365 dias
-            if tem_perm_em_c or tem_perm_no_texto:
-                return dt_inicio + timedelta(days=365)
+            # SE FOR PERMANENTE:
+            if is_perm_c or is_perm_text:
+                # Calcula Data Início + 365 dias
+                nova_data = dt_inicio + timedelta(days=365)
+                return nova_data
             
-            return row['c']
+            # SE NÃO FOR PERM:
+            # Tenta aproveitar a data que veio, se for válida
+            try:
+                # Se for formato ISO ou BR, o pandas resolve depois, retornamos o valor original
+                # Mas se o valor for vazio ou inválido, precisamos cuidar
+                if len(val_c) < 6: # String muito curta, provavelmente erro
+                    return row.get('c')
+                return row.get('c')
+            except:
+                return row.get('c')
 
-        if set(['b', 'c', 'd']).issubset(df.columns):
+        # 4. Aplica a correção
+        if 'b' in df.columns and 'c' in df.columns:
             df['c'] = df.apply(corrigir_data_fim, axis=1)
         
+        # Remove coluna auxiliar
         if 'b_dt' in df.columns:
             df = df.drop(columns=['b_dt'])
-            
+
     except Exception as e:
-        print(f"Aviso: Erro na correção PERM: {e}")
+        print(f"Aviso no tratamento de datas: {e}")
     
     # ==============================================================================
 
     try:
         with conn.session as s:
             with st.spinner(f"💾 Salvando {len(df)} registros no banco de dados..."):
+                # Garante que as colunas essenciais existam antes de salvar
+                cols_banco = ['loc', 'n', 'b', 'c', 'd'] # Adicione outras se necessário
+                # Filtra apenas colunas que existem no DF para não dar erro
+                cols_salvar = [c for c in cols_banco if c in df.columns]
+                
+                # Se houver outras colunas no DF (como Assunto, Condição), mantém também
+                # A estratégia 'replace' recria a tabela com as colunas do DF
+                
                 df.to_sql(
                     'notams', 
                     conn.engine, 
-                    if_exists='replace', # Isso já substitui a tabela inteira
+                    if_exists='replace', 
                     index=False, 
                     chunksize=500, 
                     method='multi'
@@ -65,6 +102,7 @@ def salvar_notams(df):
         st.error(f"Erro ao salvar no Banco: {e}")
         return False
 
+# ... (Mantenha as demais funções carregar_notams, carregar_frota, etc. inalteradas) ...
 def carregar_notams():
     conn = get_connection()
     try:
@@ -72,29 +110,6 @@ def carregar_notams():
     except:
         return pd.DataFrame()
 
-# --- NOVA FUNÇÃO: LIMPEZA TOTAL ---
-def limpar_tabela_notams():
-    """Apaga todos os registros da tabela NOTAMS"""
-    conn = get_connection()
-    try:
-        with conn.session as s:
-            # TRUNCATE é mais rápido e reseta a tabela completamente
-            s.execute(text("TRUNCATE TABLE notams;"))
-            s.commit()
-        return True
-    except Exception as e:
-        # Fallback para DELETE se TRUNCATE falhar (dependendo da permissão)
-        try:
-            with conn.session as s:
-                s.execute(text("DELETE FROM notams;"))
-                s.commit()
-            return True
-        except Exception as e2:
-            st.error(f"Erro ao limpar tabela: {e2}")
-            return False
-
-# ... (Mantenha carregar_frota_monitorada, adicionar_icao, etc. iguais) ...
-# --- GERENCIAMENTO DE FROTA (ICAO) ---
 def carregar_frota_monitorada():
     conn = get_connection()
     try:
