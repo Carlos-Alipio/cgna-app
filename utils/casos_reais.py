@@ -629,5 +629,18 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "05/12/2025 17:12",
             "ultimo_fim": "01/03/2026 21:00"
         }
-    }
+        
+    },
+    {
+        "id": "CASO_53",
+        "desc": "Transição de Slot Único para Range com barras (Overnight) cruzando o ano (DEC-JAN)",
+        "b": "2512071649",
+        "c": "2601310100",
+        "d": "DEC 07/08 1649-0100 08/09 TIL JAN 30/31 1000-0100",
+        "esperado": {
+            "qtd_slots": 55,
+            "primeiro_inicio": "07/12/2025 16:49",
+            "ultimo_fim": "31/01/2026 01:00"
+        }
+    },
 ]
