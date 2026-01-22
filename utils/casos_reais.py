@@ -254,4 +254,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "30/01/2026 19:00"
         }
     },
+    {
+        "id": "CASO_22",
+        "desc": "Data Específica + Range Longo (Sem keyword DLY)",
+        "b": "2511091834",
+        "c": "2602062100",
+        "d": "NOV 09 1834-2100 NOV 10 TIL FEB 06 0900-2100",
+        "esperado": {
+            "qtd_slots": 90,
+            "primeiro_inicio": "09/11/2025 18:34",
+            "ultimo_fim": "06/02/2026 21:00"
+        }
+    },
 ]
