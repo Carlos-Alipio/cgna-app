@@ -8,6 +8,36 @@ st.set_page_config(page_title="Lab Parser Blindado", layout="wide")
 st.title("🛡️ Laboratório com Regressão Automática")
 
 # ==============================================================================
+# 0. FUNÇÃO AUXILIAR DE CONVERSÃO DE INPUT
+# ==============================================================================
+def converter_input_para_raw(texto_input):
+    """
+    Transforma inputs variados (ex: '01/02/2026 04:40' ou '2602010440') 
+    no formato padrão NOTAM (YYMMDDHHMM)
+    """
+    if not texto_input: return ""
+    
+    # Remove tudo que não é número
+    limpo = ''.join(filter(str.isdigit, str(texto_input)))
+    
+    # Caso 1: Formato Humano Completo (DDMMYYYYHHMM) -> 12 dígitos
+    # Ex: 010220260440 (vindo de 01/02/2026 04:40)
+    if len(limpo) == 12:
+        dia = limpo[0:2]
+        mes = limpo[2:4]
+        ano = limpo[6:8] # Pega os 2 últimos dígitos do ano (2026 -> 26)
+        hora = limpo[8:12]
+        return f"{ano}{mes}{dia}{hora}"
+        
+    # Caso 2: Já está no formato NOTAM (YYMMDDHHMM) -> 10 dígitos
+    elif len(limpo) == 10:
+        return limpo
+        
+    # Caso 3: Formato Curto (DDMMYYHHMM) -> 10 dígitos (raro, mas possível)
+    # Assume que é NOTAM direto
+    return limpo
+
+# ==============================================================================
 # 1. MOTOR DE REGRESSÃO (RODA AUTOMATICAMENTE)
 # ==============================================================================
 st.sidebar.header("🚦 Status da Regressão")
@@ -17,34 +47,23 @@ sucessos = 0
 
 for caso in casos_reais.CASOS_BLINDADOS:
     try:
-        # Roda o parser atual com os dados antigos
         slots = parser_notam.interpretar_periodo_atividade(
             caso['d'], "TESTE", caso['b'], caso['c']
         )
         
-        # Cria o Snapshot do resultado atual
         qtd_atual = len(slots)
-        if qtd_atual > 0:
-            # Ordena para garantir comparação correta
-            slots = sorted(slots, key=lambda x: x['inicio'])
-            primeiro_ini = slots[0]['inicio'].strftime("%d/%m/%Y %H:%M")
-            ultimo_fim = slots[-1]['fim'].strftime("%d/%m/%Y %H:%M")
-        else:
-            primeiro_ini = "N/A"
-            ultimo_fim = "N/A"
+        primeiro_ini = slots[0]['inicio'].strftime("%d/%m/%Y %H:%M") if qtd_atual > 0 else "N/A"
+        ultimo_fim = sorted(slots, key=lambda x: x['inicio'])[-1]['fim'].strftime("%d/%m/%Y %H:%M") if qtd_atual > 0 else "N/A"
             
-        # COMPARAÇÃO (O momento da verdade)
         esp = caso['esperado']
         erros_caso = []
         
         if qtd_atual != esp['qtd_slots']:
-            erros_caso.append(f"Qtd Slots: Esperado {esp['qtd_slots']} vs Gerado {qtd_atual}")
-            
+            erros_caso.append(f"Qtd: {esp['qtd_slots']} vs {qtd_atual}")
         if primeiro_ini != esp['primeiro_inicio']:
-            erros_caso.append(f"1º Slot: Esperado {esp['primeiro_inicio']} vs Gerado {primeiro_ini}")
-            
+            erros_caso.append(f"1º: {esp['primeiro_inicio']} vs {primeiro_ini}")
         if ultimo_fim != esp['ultimo_fim']:
-            erros_caso.append(f"Último Slot: Esperado {esp['ultimo_fim']} vs Gerado {ultimo_fim}")
+            erros_caso.append(f"Último: {esp['ultimo_fim']} vs {ultimo_fim}")
             
         if erros_caso:
             falhas.append(f"❌ **{caso['id']}**: " + " | ".join(erros_caso))
@@ -52,17 +71,15 @@ for caso in casos_reais.CASOS_BLINDADOS:
             sucessos += 1
             
     except Exception as e:
-        falhas.append(f"🔥 **{caso['id']}**: Erro de execução - {str(e)}")
+        falhas.append(f"🔥 **{caso['id']}**: Erro - {str(e)}")
 
-# EXIBE O SEMÁFORO
 if len(falhas) > 0:
-    st.error(f"🚨 PARE! O código atual QUEBROU {len(falhas)} caso(s) antigo(s)!")
-    for f in falhas:
-        st.markdown(f)
-    st.sidebar.error("REGRESSÃO FALHOU")
+    st.error(f"🚨 PARE! Regressão falhou em {len(falhas)} caso(s)!")
+    for f in falhas: st.markdown(f)
+    st.sidebar.error("FALHA CRÍTICA")
 else:
-    st.success(f"✅ Sistema Estável: Todos os {sucessos} casos blindados estão funcionando.")
-    st.sidebar.success("SISTEMA ÍNTEGRO")
+    st.success(f"✅ Sistema Estável ({sucessos} casos OK).")
+    st.sidebar.success("SISTEMA ONLINE")
 
 st.divider()
 
@@ -71,48 +88,40 @@ st.divider()
 # ==============================================================================
 st.subheader("🔬 Testar Novo Caso")
 
-c1, c2, c3 = st.columns(3)
-with c1:
-    dt_inicio = st.date_input("Data Início (B)", value=datetime.now())
-    # ALTERADO: Campo Livre
-    hr_inicio = st.text_input("Hora Início (B)", value="00:00", help="Ex: 0440 ou 04:40")
-    
-with c2:
-    dt_fim = st.date_input("Data Fim (C)", value=datetime.now())
-    # ALTERADO: Campo Livre
-    hr_fim = st.text_input("Hora Fim (C)", value="23:59", help="Ex: 0750 ou 07:50")
+col_b, col_c = st.columns(2)
 
-with c3:
-    # Tratamento para gerar o RAW corretamente independente se usar : ou não
-    h_i_clean = hr_inicio.replace(":", "").strip().zfill(4)
-    h_f_clean = hr_fim.replace(":", "").strip().zfill(4)
-    
-    raw_b = dt_inicio.strftime("%y%m%d") + h_i_clean
-    raw_c = dt_fim.strftime("%y%m%d") + h_f_clean
-    
-    st.caption(f"Raw B: {raw_b}")
-    st.caption(f"Raw C: {raw_c}")
+with col_b:
+    input_b = st.text_input("Início (B)", placeholder="Cole aqui: 01/02/2026 04:40")
+    raw_b = converter_input_para_raw(input_b)
+    if raw_b: st.caption(f"Interpretado (RAW): `{raw_b}`")
 
-texto_d = st.text_area("Texto Item D (Novo):", height=80)
+with col_c:
+    input_c = st.text_input("Fim (C)", placeholder="Cole aqui: 26/03/2026 07:45")
+    raw_c = converter_input_para_raw(input_c)
+    if raw_c: st.caption(f"Interpretado (RAW): `{raw_c}`")
 
-if st.button("Processar Novo Caso", type="primary"):
-    try:
-        slots = parser_notam.interpretar_periodo_atividade(texto_d, "TESTE", raw_b, raw_c)
-        
-        if not slots:
-            st.warning("Nenhum slot gerado.")
-        else:
-            df = pd.DataFrame(slots)
-            df['Dia'] = df['inicio'].dt.strftime('%d/%m/%Y (%a)')
-            df['Início'] = df['inicio'].dt.strftime('%H:%M')
-            df['Fim'] = df['fim'].dt.strftime('%H:%M')
+texto_d = st.text_area("Texto Item D:", height=100, placeholder="Cole o texto do período aqui...")
+
+if st.button("Processar", type="primary"):
+    if not raw_b or not raw_c:
+        st.warning("⚠️ Preencha as datas de Início e Fim corretamente.")
+    else:
+        try:
+            slots = parser_notam.interpretar_periodo_atividade(texto_d, "TESTE", raw_b, raw_c)
             
-            # Ordena
-            df = df.sort_values('inicio')
-            
-            # Resumo para "Blindagem"
-            st.info("👇 Se este resultado estiver correto, adicione estes dados ao `casos_reais.py`:")
-            code_snippet = f"""
+            if not slots:
+                st.warning("Nenhum slot gerado.")
+            else:
+                df = pd.DataFrame(slots)
+                # Ordena
+                df = df.sort_values('inicio')
+                
+                # Dados para o Cofre
+                p_ini = df.iloc[0]['inicio'].strftime('%d/%m/%Y %H:%M')
+                u_fim = df.iloc[-1]['fim'].strftime('%d/%m/%Y %H:%M')
+                
+                st.info("👇 **Snippet para `casos_reais.py`:**")
+                code = f"""
     {{
         "id": "CASO_NOVO",
         "desc": "...",
@@ -121,15 +130,19 @@ if st.button("Processar Novo Caso", type="primary"):
         "d": "{texto_d}",
         "esperado": {{
             "qtd_slots": {len(slots)},
-            "primeiro_inicio": "{df.iloc[0]['inicio'].strftime('%d/%m/%Y %H:%M')}",
-            "ultimo_fim": "{df.iloc[-1]['fim'].strftime('%d/%m/%Y %H:%M')}"
+            "primeiro_inicio": "{p_ini}",
+            "ultimo_fim": "{u_fim}"
         }}
-    }},
-            """
-            st.code(code_snippet, language="python")
-            
-            st.metric("Slots Gerados", len(df))
-            st.dataframe(df[['Dia', 'Início', 'Fim']], use_container_width=True)
-            
-    except Exception as e:
-        st.error(f"Erro: {e}")
+    }},"""
+                st.code(code, language="python")
+                
+                # Tabela Visual
+                df['Dia'] = df['inicio'].dt.strftime('%d/%m/%Y (%a)')
+                df['Início'] = df['inicio'].dt.strftime('%H:%M')
+                df['Fim'] = df['fim'].dt.strftime('%H:%M')
+                
+                st.metric("Slots Gerados", len(df))
+                st.dataframe(df[['Dia', 'Início', 'Fim']], use_container_width=True, height=400)
+                
+        except Exception as e:
+            st.error(f"Erro: {e}")
