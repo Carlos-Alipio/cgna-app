@@ -42,6 +42,17 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "26/03/2026 07:45"
         }
     },
-
+    {
+        "id": "CASO_04",
+        "desc": "Múltiplos Meses e Retorno Temporal (Jan -> Mar -> Jan)",
+        "b": "2601070830",
+        "c": "2603251130",
+        "d": "JAN 07 14 21 FEB 04 11 18 25 MAR 04 11 18 25 0830-1130 JAN 27 TIL 31 0800-1300",
+        "esperado": {
+            "qtd_slots": 16,
+            "primeiro_inicio": "07/01/2026 08:30",
+            "ultimo_fim": "25/03/2026 11:30"
+        }
+    },
 
 ]
