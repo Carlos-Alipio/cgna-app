@@ -510,4 +510,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "13/02/2026 07:50"
         }
     },
+    {
+        "id": "CASO_43",
+        "desc": "Mix: Dia Único (Início) + Intervalo DLY com Múltiplos Horários",
+        "b": "2601051800",
+        "c": "2603152130",
+        "d": "JAN 05 1800-2130 JAN 06 TIL MAR 15 DLY 0800-1230 1800-2130",
+        "esperado": {
+            "qtd_slots": 139,
+            "primeiro_inicio": "05/01/2026 18:00",
+            "ultimo_fim": "15/03/2026 21:30"
+        }
+    },
 ]
