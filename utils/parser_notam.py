@@ -53,7 +53,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V9: Correção do Filtro de Bordas (B e C) na Geração Final.
+    V10: Ordenação Cronológica Final para corrigir bugs de sequência.
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = parse_notam_date(item_c_raw)
@@ -175,12 +175,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            # --- FILTRO DE BORDAS REINTRODUZIDO (A Correção) ---
-            # Garante que o slot esteja efetivamente dentro da vigência do NOTAM
-            # Margem de segurança removida ou ajustada para ser estrita conforme necessidade
+            # Filtro de Bordas
             if s_fim < dt_b or s_ini > dt_c:
                 continue
             
             slots.append({'inicio': s_ini, 'fim': s_fim})
 
+    # ORDENAÇÃO FINAL (Vital para testes de regressão)
+    slots.sort(key=lambda x: x['inicio'])
+    
     return slots
