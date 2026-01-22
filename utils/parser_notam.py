@@ -49,10 +49,9 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
+    V18.4: Fallback automático para o range B-C quando há apenas filtro semanal (MON-FRI).
     """
     dt_b = parse_notam_date(item_b_raw)
-    
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
         if dt_b: dt_c = dt_b + timedelta(days=365)
@@ -89,8 +88,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 start = dt1.replace(hour=int(h1[:2]), minute=int(h1[2:]))
                 end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
                 if end < start: end = end.replace(year=end.year + 1)
-                
-                # Clipping Fase 0
                 if not (end <= dt_b or start >= dt_c):
                     slots.append({'inicio': max(start, dt_b), 'fim': min(end, dt_c)})
     text = re_hibrido.sub(' ', text)
@@ -192,7 +189,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
+            
+            # --- NOVO: FALLBACK DE DATA PARA FILTRO SEMANAL ---
+            # Se definiu dias da semana mas não datas específicas, assume o período total do NOTAM.
+            if not datas_deste_segmento and filtro_semana_deste_segmento:
+                curr = dt_b
+                while curr <= dt_c:
+                    datas_deste_segmento.append(curr)
+                    curr += timedelta(days=1)
+
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
+            
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c: datas_deste_segmento.append(curr); curr += timedelta(days=1)
@@ -208,7 +215,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
-
             if is_complex and filtro_dia_inicio is not None:
                 if dt_final.weekday() != filtro_dia_inicio: continue
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
@@ -219,7 +225,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            # Clipping Fase 1
             if s_fim <= dt_b or s_ini >= dt_c: continue
             slots.append({'inicio': max(s_ini, dt_b), 'fim': min(s_fim, dt_c)})
 
