@@ -643,4 +643,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "31/01/2026 01:00"
         }
     },
+    {
+        "id": "CASO_54",
+        "desc": "Mix: Slot Único (B) + Range Longo (DEC-MAR) com Overnight diário",
+        "b": "2512091859",
+        "c": "2603070400",
+        "d": "DEC 09/10 1859-0400 10/11 TIL MAR 06/07 1000-0400",
+        "esperado": {
+            "qtd_slots": 88,
+            "primeiro_inicio": "09/12/2025 18:59",
+            "ultimo_fim": "07/03/2026 04:00"
+        }
+    },
 ]
