@@ -23,7 +23,7 @@ RE_HORARIO_SEGMENT = re.compile(r'(\d{4}-\d{4}|SR-SS|SR-\d{4}|\d{4}-SS)')
 # Regex para limpar dias compostos ex: MON/TUE -> MON
 RE_DIA_COMPOSTO = re.compile(r'\b([A-Z]{3})/([A-Z]{3})\b')
 
-# Regex para capturar datas compostas ex: DEC 01/02
+# Regex para capturar datas compostas ex: DEC 01/02 (CRUCIAL!)
 RE_DATA_BARRA = re.compile(r'\b([A-Z]{3})\s+(\d{1,2})/(\d{1,2})\b')
 
 RE_WEEK_RANGE = re.compile(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b')
@@ -105,11 +105,38 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        # 1. Limpeza de Dias Compostos (MON/TUE -> MON)
+        # --- ETAPA 0: PROCURA DATA COM BARRA (DEC 01/02) ANTES DE LIMPAR ---
+        # Isso garante que "01/02" seja lido como data antes da barra ser removida
+        ini_dt_seg = None
+        fim_dt_seg = None
+        achou_data = False
+
+        m_barra = RE_DATA_BARRA.search(segmento)
+        if m_barra:
+            m1, d1, d2 = m_barra.groups()
+            try:
+                mes_num = MONTH_MAP.get(m1)
+                if mes_num:
+                    ini_dt_seg = datetime(y, mes_num, int(d1))
+                    fim_dt_seg = datetime(y, mes_num, int(d2))
+                    ini_dt_seg = ajustar_ano(ini_dt_seg, dt_b)
+                    
+                    # Ajuste de virada de mês/ano (ex: DEC 31/01)
+                    if fim_dt_seg.month < ini_dt_seg.month:
+                        fim_dt_seg = fim_dt_seg.replace(year=ini_dt_seg.year + 1)
+                    else:
+                        fim_dt_seg = fim_dt_seg.replace(year=ini_dt_seg.year)
+                    
+                    achou_data = True
+                    contexto_validade = (ini_dt_seg, fim_dt_seg)
+            except: pass
+
+        # --- ETAPA 1: LIMPEZA PARA DIAS DA SEMANA ---
+        # Agora sim limpamos as barras para tratar MON/TUE
         segmento_limpo = RE_DIA_COMPOSTO.sub(r'\1', segmento)
         segmento_limpo = segmento_limpo.replace("/", " ") 
 
-        # 2. Identificação de Dias da Semana
+        # --- ETAPA 2: IDENTIFICAÇÃO DE DIAS DA SEMANA ---
         dias_filtro = set()
         for m_wr in RE_WEEK_RANGE.finditer(segmento_limpo):
             d1_str, d2_str = m_wr.groups()
@@ -124,35 +151,13 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
             if re.search(r'\b' + dia_nome + r'\b', segmento_sem_week):
                 dias_filtro.add(dia_idx)
         
-        # 3. Identificação de Datas
-        segmento_datas = segmento_sem_week
-        for dia in WEEK_MAP.keys(): 
-            segmento_datas = re.sub(r'\b' + dia + r'\b', " ", segmento_datas)
-        
-        ini_dt_seg = None
-        fim_dt_seg = None
-        achou_data = False
-
-        # A. Procura Range com Barra (DEC 01/02) - NOVO!
-        m_barra = RE_DATA_BARRA.search(segmento_datas)
-        if m_barra:
-            m1, d1, d2 = m_barra.groups()
-            try:
-                mes_num = MONTH_MAP.get(m1)
-                if mes_num:
-                    ini_dt_seg = datetime(y, mes_num, int(d1))
-                    fim_dt_seg = datetime(y, mes_num, int(d2))
-                    ini_dt_seg = ajustar_ano(ini_dt_seg, dt_b)
-                    
-                    # Ajuste simples se d2 < d1 (virada de mês? raro nessa sintaxe, assume mesmo mês/ano)
-                    fim_dt_seg = ajustar_ano(fim_dt_seg, dt_b)
-                    
-                    achou_data = True
-                    contexto_validade = (ini_dt_seg, fim_dt_seg)
-            except: pass
-
-        # B. Procura Range Completo (DEC 02 TIL FEB 28)
+        # --- ETAPA 3: OUTRAS FORMATOS DE DATA (SE AINDA NÃO ACHOU) ---
         if not achou_data:
+            segmento_datas = segmento_sem_week
+            for dia in WEEK_MAP.keys(): 
+                segmento_datas = re.sub(r'\b' + dia + r'\b', " ", segmento_datas)
+            
+            # Procura Range Completo (DEC 02 TIL FEB 28)
             m_full = RE_FULL_RANGE.search(segmento_datas)
             if m_full:
                 m1, d1, m2, d2 = m_full.groups()
@@ -173,7 +178,7 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         contexto_validade = (ini_dt_seg, fim_dt_seg)
                 except: pass
         
-        # 4. Memória e Geração
+        # --- ETAPA 4: MEMÓRIA E GERAÇÃO ---
         if not achou_data and contexto_validade:
             ini_dt_seg, fim_dt_seg = contexto_validade
         
@@ -213,11 +218,10 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
-    # Limpeza do Texto - REMOVIDO RE_BARRA_DATA PARA PROTEGER "01/02"
+    # Limpeza do Texto
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
-    # A linha abaixo foi removida pois deletava o '/02' do 'DEC 01/02'
-    # text = RE_BARRA_DATA.sub(r'\1', text) 
+    # IMPORTANTE: Não removemos mais RE_BARRA_DATA globalmente aqui
     text = text.replace(u'\xa0', u' ')
 
     res = []
