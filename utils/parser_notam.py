@@ -62,7 +62,7 @@ def resolver_dia_semana_composto(token):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V13: Suporte a 'PERM' no campo C (Adiciona 365 dias de validade).
+    V14: Correção de Precedência DLY. Datas explícitas (JAN 06) vencem DLY genérico.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -89,7 +89,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
-    # Se não houver horários (Item D vazio ou sem padrão HHMM-HHMM)
     if not matches:
         return [{'inicio': dt_b, 'fim': dt_c}]
 
@@ -104,98 +103,101 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        if "DLY" in segmento or "DAILY" in segmento:
+        # Tokenização Inicial
+        tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
+        tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
+
+        tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
+        tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
+        
+        # --- LÓGICA V14: Prioridade para Datas Específicas ---
+        if tem_conteudo_data or tem_conteudo_semana:
+            achou_nova_definicao = True
+            
+            # 1. SCANNER SEMANA
+            k = 0
+            while k < len(tokens):
+                tok = tokens[k]
+                idx_tok = resolver_dia_semana_composto(tok)
+                
+                if idx_tok is not None:
+                    if k + 2 < len(tokens) and tokens[k+1] == "TIL":
+                        idx_alvo = resolver_dia_semana_composto(tokens[k+2])
+                        if idx_alvo is not None:
+                            if idx_tok <= idx_alvo:
+                                filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
+                            else:
+                                filtro_semana_deste_segmento.update(range(idx_tok, 7))
+                                filtro_semana_deste_segmento.update(range(0, idx_alvo + 1))
+                            k += 3
+                            continue
+                    filtro_semana_deste_segmento.add(idx_tok)
+                    k += 1
+                else:
+                    k += 1
+            
+            # 2. SCANNER DATAS
+            i = 0
+            while i < len(tokens):
+                tok = tokens[i]
+                if tok in MONTH_MAP:
+                    contexto_mes = MONTH_MAP[tok]
+                    i += 1
+                    continue
+                if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None):
+                    i += 1
+                    continue
+
+                if tok[0].isdigit():
+                    if "/" in tok:
+                        partes = tok.split("/")
+                        dia_start, dia_extra = int(partes[0]), int(partes[1])
+                        dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
+                        if dt: datas_deste_segmento.append(dt)
+                        if not cruza_noite:
+                            dt2 = criar_data_segura(contexto_ano, contexto_mes, dia_extra)
+                            if dt2: datas_deste_segmento.append(dt2)
+                        i += 1
+                        continue
+
+                    dia_start = int(tok)
+                    if i + 2 < len(tokens) and tokens[i+1] == "TIL":
+                        alvo = tokens[i+2]
+                        if alvo.isdigit():
+                            dia_end = int(alvo)
+                            lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end)
+                            datas_deste_segmento.extend(lista)
+                            i += 3
+                            continue
+                        elif alvo in MONTH_MAP:
+                            mes_dest = MONTH_MAP[alvo]
+                            if i + 3 < len(tokens) and tokens[i+3].isdigit():
+                                dia_dest = int(tokens[i+3])
+                                lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_dest)
+                                datas_deste_segmento.extend(lista)
+                                contexto_mes = mes_dest
+                                i += 4
+                                continue
+                    
+                    dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
+                    if dt: datas_deste_segmento.append(dt)
+                    i += 1
+                    continue
+                i += 1
+            
+            # Herança Híbrida (Só dias mudaram, mantém datas)
+            if not datas_deste_segmento and ultima_lista_datas:
+                datas_deste_segmento = list(ultima_lista_datas)
+
+        # --- SE NÃO ACHOU DATAS ESPECÍFICAS, MAS TEM 'DLY' ---
+        elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c:
                 datas_deste_segmento.append(curr)
                 curr += timedelta(days=1)
             achou_nova_definicao = True
         
-        else:
-            tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
-            tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
-
-            tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
-            tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
-            
-            if tem_conteudo_data or tem_conteudo_semana:
-                achou_nova_definicao = True
-                
-                # 1. SCANNER SEMANA
-                k = 0
-                while k < len(tokens):
-                    tok = tokens[k]
-                    idx_tok = resolver_dia_semana_composto(tok)
-                    
-                    if idx_tok is not None:
-                        if k + 2 < len(tokens) and tokens[k+1] == "TIL":
-                            idx_alvo = resolver_dia_semana_composto(tokens[k+2])
-                            if idx_alvo is not None:
-                                if idx_tok <= idx_alvo:
-                                    filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
-                                else:
-                                    filtro_semana_deste_segmento.update(range(idx_tok, 7))
-                                    filtro_semana_deste_segmento.update(range(0, idx_alvo + 1))
-                                k += 3
-                                continue
-                        filtro_semana_deste_segmento.add(idx_tok)
-                        k += 1
-                    else:
-                        k += 1
-                
-                # 2. SCANNER DATAS
-                i = 0
-                while i < len(tokens):
-                    tok = tokens[i]
-                    if tok in MONTH_MAP:
-                        contexto_mes = MONTH_MAP[tok]
-                        i += 1
-                        continue
-                    if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None):
-                        i += 1
-                        continue
-
-                    if tok[0].isdigit():
-                        if "/" in tok:
-                            partes = tok.split("/")
-                            dia_start, dia_extra = int(partes[0]), int(partes[1])
-                            dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
-                            if dt: datas_deste_segmento.append(dt)
-                            if not cruza_noite:
-                                dt2 = criar_data_segura(contexto_ano, contexto_mes, dia_extra)
-                                if dt2: datas_deste_segmento.append(dt2)
-                            i += 1
-                            continue
-
-                        dia_start = int(tok)
-                        if i + 2 < len(tokens) and tokens[i+1] == "TIL":
-                            alvo = tokens[i+2]
-                            if alvo.isdigit():
-                                dia_end = int(alvo)
-                                lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end)
-                                datas_deste_segmento.extend(lista)
-                                i += 3
-                                continue
-                            elif alvo in MONTH_MAP:
-                                mes_dest = MONTH_MAP[alvo]
-                                if i + 3 < len(tokens) and tokens[i+3].isdigit():
-                                    dia_dest = int(tokens[i+3])
-                                    lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_dest)
-                                    datas_deste_segmento.extend(lista)
-                                    contexto_mes = mes_dest
-                                    i += 4
-                                    continue
-                        
-                        dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
-                        if dt: datas_deste_segmento.append(dt)
-                        i += 1
-                        continue
-                    i += 1
-                
-                # Herança Híbrida
-                if not datas_deste_segmento and ultima_lista_datas:
-                    datas_deste_segmento = list(ultima_lista_datas)
-
+        # --- ATUALIZAÇÃO DA MEMÓRIA ---
         if achou_nova_definicao:
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
@@ -203,6 +205,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
+        # --- GERAÇÃO FINAL ---
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
