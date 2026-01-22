@@ -618,4 +618,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "26/02/2026 04:00"  # <--- CORRIGIDO (Era 25/02 10:00)
         }
     },
+    {
+        "id": "CASO_52",
+        "desc": "Sequência Progressiva: Slot Único + Range Mesmo Mês + Range Virada de Ano (DEC-MAR)",
+        "b": "2512051712",
+        "c": "2603012100",
+        "d": "DEC 05 1712-2359 06 TIL 17 0900-2359 DEC 18 TIL MAR 01 0600-2100",
+        "esperado": {
+            "qtd_slots": 87,
+            "primeiro_inicio": "05/12/2025 17:12",
+            "ultimo_fim": "01/03/2026 21:00"
+        }
+    }
 ]
