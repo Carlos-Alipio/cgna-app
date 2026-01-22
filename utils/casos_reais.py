@@ -847,4 +847,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "01/05/2026 20:00"
         }
     },
+    {
+        "id": "CASO_71",
+        "desc": "Janela Dupla Solar: Descarte do Dia 1 (B pós-SS) e 2 slots diários (SR-1200, 1900-SS) até Março",
+        "b": "2512162101",
+        "c": "2603152126",
+        "d": "DEC 16 2101-SS DEC 17 TIL MAR 15 SR-1200 1900-SS",
+        "esperado": {
+            "qtd_slots": 179,
+            "primeiro_inicio": "17/12/2025 08:00",
+            "ultimo_fim": "15/03/2026 20:00"
+        }
+    },
 ]
