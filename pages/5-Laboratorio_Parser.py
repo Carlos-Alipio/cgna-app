@@ -8,10 +8,17 @@ st.set_page_config(page_title="Lab Parser Blindado", layout="wide")
 st.title("🛡️ Laboratório com Regressão Automática")
 
 # ==============================================================================
-# 0. FUNÇÃO AUXILIAR DE CONVERSÃO DE INPUT
+# 0. FUNÇÃO AUXILIAR DE CONVERSÃO DE INPUT (ATUALIZADA PARA PERM)
 # ==============================================================================
 def converter_input_para_raw(texto_input):
     if not texto_input: return ""
+    
+    # Validação de PERM
+    texto_upper = str(texto_input).upper().strip()
+    if "PERM" in texto_upper:
+        return "PERM"
+
+    # Validação de Datas Numéricas
     limpo = ''.join(filter(str.isdigit, str(texto_input)))
     if len(limpo) == 12: # DDMMYYYYHHMM
         dia = limpo[0:2]
@@ -87,7 +94,7 @@ with col_b:
     if raw_b: st.caption(f"Interpretado: `{raw_b}`")
 
 with col_c:
-    input_c = st.text_input("Fim (C)", placeholder="Ex: 30/03/2026 09:00")
+    input_c = st.text_input("Fim (C)", placeholder="Ex: 30/03/2026 09:00 ou PERM")
     raw_c = converter_input_para_raw(input_c)
     if raw_c: st.caption(f"Interpretado: `{raw_c}`")
 
@@ -125,16 +132,14 @@ if st.button("Processar", type="primary"):
         }}
     }},""", language="python")
                 
-                # --- VISUALIZAÇÃO INTELIGENTE (A Correção) ---
+                # --- VISUALIZAÇÃO INTELIGENTE ---
                 df['Dia'] = df['inicio'].dt.strftime('%d/%m/%Y (%a)')
                 df['Início'] = df['inicio'].dt.strftime('%H:%M')
                 
-                # Função para formatar o FIM: Mostra data se for dia diferente
                 def formatar_fim(row):
                     if row['inicio'].date() == row['fim'].date():
                         return row['fim'].strftime('%H:%M')
                     else:
-                        # Destaca a data final se for diferente da inicial
                         return row['fim'].strftime('%d/%m/%Y %H:%M')
                 
                 df['Fim'] = df.apply(formatar_fim, axis=1)
