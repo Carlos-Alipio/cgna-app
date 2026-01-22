@@ -146,4 +146,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/03/2026 07:55"
         }
     },
+    {
+        "id": "CASO_13",
+        "desc": "DLY com Filtro de Bordas (Corte de horário fora da vigência)",
+        "b": "2512232030",
+        "c": "2603182100",
+        "d": "DLY 1000-1030 2030-2100",
+        "esperado": {
+            "qtd_slots": 171, # 172 brutos - 1 (do dia 23/12 às 10:00)
+            "primeiro_inicio": "23/12/2025 20:30",
+            "ultimo_fim": "18/03/2026 21:00"
+        }
+    },
 ]
