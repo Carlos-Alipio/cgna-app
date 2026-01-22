@@ -823,4 +823,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "11/03/2026 20:00"
         }
     },
+    {
+        "id": "CASO_69",
+        "desc": "Mega Híbrido: Alternância entre horários fixos, datas com barras e rotinas solares (Nov a Jan)",
+        "b": "2511081406",
+        "c": "2601292220",
+        "d": "NOV 08 1406-2151 09 TIL 21 DLY SR-SS 22/23 0938-2155 24 TIL JAN 29 DLY SR-SS",
+        "esperado": {
+            "qtd_slots": 83,
+            "primeiro_inicio": "08/11/2025 14:06",
+            "ultimo_fim": "29/01/2026 20:00"
+        }
+    },
 ]
