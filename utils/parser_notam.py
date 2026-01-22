@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.1: Com correção para sintaxe suja '30/DEC' (separação de Num/Letra).
+    V18.2: Inclusão de suporte a SR (Sunrise) e SS (Sunset) via placeholders fixos.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -63,11 +63,18 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     slots = []
     text = str(item_d_text).upper()
+
+    # --- NOVO: SUPORTE A HORÁRIOS SOLARES (SR/SS) ---
+    # Substitui as siglas SR/SS por horários padrão para processamento.
+    # Futuramente, estes valores poderão ser buscados via API AISWEB por data/ICAO.
+    SR_PLACEHOLDER = "0600"
+    SS_PLACEHOLDER = "1800"
+    text = re.sub(r'\bSR\b', SR_PLACEHOLDER, text)
+    text = re.sub(r'\bSS\b', SS_PLACEHOLDER, text)
+    
     text = " ".join(text.split())
     
     # --- CORREÇÃO DE SINTAXE SUJA (CASO 51) ---
-    # Separa números de letras conectados por barra (ex: "30/DEC" vira "30 DEC")
-    # Isso garante que o mês seja reconhecido como token separado.
     text = re.sub(r'(\d+)/([A-Z]+)', r'\1 \2', text)
     
     contexto_ano = dt_b.year
