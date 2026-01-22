@@ -78,4 +78,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "07/04/2026 07:59" # Última Terça-feira (TUE) antes de 10/Abr
         }
     },
+    {
+        "id": "CASO_07",
+        "desc": "Múltiplos Horários com Herança de Mês Implícita (JAN)",
+        "b": "2512191300",
+        "c": "2601282000",
+        "d": "DEC 19 29 TIL 31 1300-2000 DEC 22 TIL 27 0301-0900 JAN 01 02 12 TIL 16 26 TIL 28 1300-2000 06 TIL 10 20 TIL 24 0301-0900",
+        "esperado": {
+            "qtd_slots": 30,
+            "primeiro_inicio": "19/12/2025 13:00",
+            "ultimo_fim": "28/01/2026 20:00"
+        }
+    },
 ]
