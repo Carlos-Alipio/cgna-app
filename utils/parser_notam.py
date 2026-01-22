@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.2.1: SR (Sunrise) ajustado para 0800 e SS (Sunset) para 2000.
+    V18.3: Implementação de CLIPPING (max/min) para garantir respeito aos limites B e C.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -64,22 +64,18 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     slots = []
     text = str(item_d_text).upper()
 
-    # --- CONFIGURAÇÃO DE HORÁRIOS SOLARES (SR/SS) ---
+    # --- SUPORTE A HORÁRIOS SOLARES ---
     SR_PLACEHOLDER = "0800"
     SS_PLACEHOLDER = "2000"
-    
-    # Substituição com \b para garantir que pegue apenas a palavra exata
     text = re.sub(r'\bSR\b', SR_PLACEHOLDER, text)
     text = re.sub(r'\bSS\b', SS_PLACEHOLDER, text)
     
     text = " ".join(text.split())
-    
-    # --- CORREÇÃO DE SINTAXE SUJA ---
     text = re.sub(r'(\d+)/([A-Z]+)', r'\1 \2', text)
     
     contexto_ano = dt_b.year
 
-    # --- FASE 0: PEELING (Range Híbrido Complexo) ---
+    # --- FASE 0: PEELING (Com Clipping) ---
     re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
     for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
@@ -93,11 +89,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 start = dt1.replace(hour=int(h1[:2]), minute=int(h1[2:]))
                 end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
                 if end < start: end = end.replace(year=end.year + 1)
-                if not (end < dt_b or start > dt_c):
-                    slots.append({'inicio': start, 'fim': end})
+                
+                # Aplicação de Clipping
+                if not (end <= dt_b or start >= dt_c):
+                    slots.append({'inicio': max(start, dt_b), 'fim': min(end, dt_c)})
     text = re_hibrido.sub(' ', text)
 
-    # --- FASE 1: SCANNER MESTRE ---
+    # --- FASE 1: SCANNER MESTRE (Com Clipping) ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
     regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
@@ -108,12 +106,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
-    if not matches and not slots: return [{'inicio': dt_b, 'fim': dt_c}]
+    if not matches and not slots: 
+        return [{'inicio': dt_b, 'fim': dt_c}]
 
     for match in matches:
         c_dia_ini, c_hora_ini, c_dia_fim, c_hora_fim, s_hora_ini, s_hora_fim = match.groups()
         is_complex = (c_dia_ini is not None)
-        
         offset_dias = 0
         filtro_dia_inicio = None
         
@@ -135,13 +133,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         achou_nova_definicao = False
 
         tokens = re.findall(r'[A-Za-z0-9/]+', segmento)
-        
         tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
         tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
 
         if tem_conteudo_data or tem_conteudo_semana:
             achou_nova_definicao = True
-            
             k = 0 
             while k < len(tokens):
                 tok = tokens[k]
@@ -150,7 +146,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     for p in partes:
                         if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     k += 1; continue
-                
                 if tok in WEEK_MAP:
                     idx_tok = WEEK_MAP[tok]
                     if k + 2 < len(tokens) and tokens[k+1] == "TIL":
@@ -170,14 +165,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 tok = tokens[i]
                 if tok in WEEK_MAP or ("/" in tok and not tok[0].isdigit()): i += 1; continue
                 if tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or ("/" in tokens[i-1] and not tokens[i-1][0].isdigit())): i += 1; continue
-
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
-                
                 if tok[0].isdigit():
                     if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                         alvo = tokens[i+2]
                         dia_start = int(tok.split("/")[0])
-                        
                         if alvo[0].isdigit():
                             dia_end = int(alvo.split("/")[0])
                             datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end))
@@ -188,7 +180,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                                 dia_end = int(tokens[i+3].split("/")[0])
                                 datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_end))
                                 contexto_mes = mes_dest; i += 4; continue
-
                     if "/" in tok: 
                         partes = tok.split("/")
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
@@ -229,8 +220,9 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            if s_fim < dt_b or s_ini > dt_c: continue
-            slots.append({'inicio': s_ini, 'fim': s_fim})
+            # Aplicação de Clipping nos Limites B e C
+            if s_fim <= dt_b or s_ini >= dt_c: continue
+            slots.append({'inicio': max(s_ini, dt_b), 'fim': min(s_fim, dt_c)})
 
     slots.sort(key=lambda x: x['inicio'])
     return slots
