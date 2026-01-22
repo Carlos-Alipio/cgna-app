@@ -62,15 +62,13 @@ def resolver_dia_semana_composto(token):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V14: Correção de Precedência DLY. Datas explícitas (JAN 06) vencem DLY genérico.
+    V15: Suporte a Sintaxe Híbrida (JAN 18 1543 TIL 20 2129) e Semanas Cruzadas (SUN 0900 TIL TUE 2100).
     """
     dt_b = parse_notam_date(item_b_raw)
     
-    # Tratamento para PERM
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
-        if dt_b:
-            dt_c = dt_b + timedelta(days=365)
+        if dt_b: dt_c = dt_b + timedelta(days=365)
     else:
         dt_c = parse_notam_date(item_c_raw)
 
@@ -78,126 +76,140 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     slots = []
     text = str(item_d_text).upper().strip() if item_d_text else ""
+    contexto_ano = dt_b.year
+
+    # --- FASE 0: EXTRAÇÃO DE SLOTS ESPECIAIS (DATA+HORA MISTURADOS) ---
+    # Captura: JAN 18 1543 TIL 20 2129 ou JAN 18 1543 TIL JAN 20 2129
+    re_special = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
+    for match in re_special.finditer(text):
+        m1, d1, h1, m2, d2, h2 = match.groups()
+        if not m2: m2 = m1 # Se mês 2 não existe, herda do 1
+        
+        if m1 in MONTH_MAP and m2 in MONTH_MAP:
+            dt1 = criar_data_segura(contexto_ano, MONTH_MAP[m1], int(d1))
+            dt2 = criar_data_segura(contexto_ano, MONTH_MAP[m2], int(d2))
+            
+            if dt1 and dt2:
+                dt1 = ajustar_ano_referencia(dt1, dt_b)
+                dt2 = ajustar_ano_referencia(dt2, dt_b)
+                
+                start = dt1.replace(hour=int(h1[:2]), minute=int(h1[2:]))
+                end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
+                
+                # Ajuste de ano se virou
+                if end < start: end = end.replace(year=end.year + 1)
+
+                # Filtro de Bordas
+                if not (end < dt_b or start > dt_c):
+                    slots.append({'inicio': start, 'fim': end})
     
-    re_horario = re.compile(r'(\d{4})-(\d{4})')
-    matches = list(re_horario.finditer(text))
+    # Remove o texto processado para não confundir o parser principal
+    text = re_special.sub(' ', text)
+
+    # --- FASE 1: PARSER PRINCIPAL (AGORA COM SUPORTE A SEMANA ESTENDIDA) ---
+    # Captura: 0931-2129  OU  SUN 0931 TIL TUE 2129
+    re_horario_ext = re.compile(r'(?:(MON|TUE|WED|THU|FRI|SAT|SUN)\s+)?(\d{4})\s*(?:-|TIL)\s*(?:(MON|TUE|WED|THU|FRI|SAT|SUN)\s+)?(\d{4})')
+    matches = list(re_horario_ext.finditer(text))
     
     last_end = 0
-    contexto_ano = dt_b.year
     contexto_mes = dt_b.month
     
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
-    if not matches:
+    # Se não houver horários E nenhum slot especial foi achado
+    if not matches and not slots:
         return [{'inicio': dt_b, 'fim': dt_c}]
 
     for match in matches:
-        h_ini_str, h_fim_str = match.groups()
+        dia_semana_ini, h_ini_str, dia_semana_fim, h_fim_str = match.groups()
         segmento = text[last_end:match.start()]
         last_end = match.end()
         
-        cruza_noite = int(h_fim_str) < int(h_ini_str)
+        # Análise de Offset Semanal (SUN ... TIL TUE)
+        offset_dias = 0
+        filtro_dia_inicio = None
         
+        if dia_semana_ini and dia_semana_fim:
+            idx_ini = WEEK_MAP[dia_semana_ini]
+            idx_fim = WEEK_MAP[dia_semana_fim]
+            # Filtro: só começa slot se o dia for o dia_semana_ini
+            filtro_dia_inicio = idx_ini
+            # Calcula duração em dias (Ex: Sun(6) até Tue(1) = 2 dias)
+            if idx_fim >= idx_ini:
+                offset_dias = idx_fim - idx_ini
+            else:
+                offset_dias = (7 - idx_ini) + idx_fim
+        
+        cruza_noite = int(h_fim_str) < int(h_ini_str)
+        if offset_dias == 0 and cruza_noite:
+            offset_dias = 1 # Cruzamento padrão de meia noite
+
         datas_deste_segmento = []
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        # Tokenização Inicial
+        # --- REUTILIZAÇÃO DA LÓGICA V14 PARA EXTRAÇÃO DE DATAS ---
         tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
         tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
 
         tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
         tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
         
-        # --- LÓGICA V14: Prioridade para Datas Específicas ---
         if tem_conteudo_data or tem_conteudo_semana:
             achou_nova_definicao = True
-            
-            # 1. SCANNER SEMANA
+            # [INSERIR AQUI A LÓGICA DE SCANNER V14 - RESUMIDA PARA CABER]
             k = 0
-            while k < len(tokens):
+            while k < len(tokens): # Scanner Semana
                 tok = tokens[k]
                 idx_tok = resolver_dia_semana_composto(tok)
-                
                 if idx_tok is not None:
                     if k + 2 < len(tokens) and tokens[k+1] == "TIL":
                         idx_alvo = resolver_dia_semana_composto(tokens[k+2])
                         if idx_alvo is not None:
-                            if idx_tok <= idx_alvo:
-                                filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
-                            else:
+                            if idx_tok <= idx_alvo: filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
+                            else: 
                                 filtro_semana_deste_segmento.update(range(idx_tok, 7))
                                 filtro_semana_deste_segmento.update(range(0, idx_alvo + 1))
-                            k += 3
-                            continue
-                    filtro_semana_deste_segmento.add(idx_tok)
-                    k += 1
-                else:
-                    k += 1
-            
-            # 2. SCANNER DATAS
+                            k += 3; continue
+                    filtro_semana_deste_segmento.add(idx_tok); k += 1
+                else: k += 1
             i = 0
-            while i < len(tokens):
+            while i < len(tokens): # Scanner Datas
                 tok = tokens[i]
-                if tok in MONTH_MAP:
-                    contexto_mes = MONTH_MAP[tok]
-                    i += 1
-                    continue
-                if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None):
-                    i += 1
-                    continue
-
+                if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
+                if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None): i += 1; continue
                 if tok[0].isdigit():
                     if "/" in tok:
                         partes = tok.split("/")
-                        dia_start, dia_extra = int(partes[0]), int(partes[1])
-                        dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
+                        dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                         if dt: datas_deste_segmento.append(dt)
-                        if not cruza_noite:
-                            dt2 = criar_data_segura(contexto_ano, contexto_mes, dia_extra)
-                            if dt2: datas_deste_segmento.append(dt2)
-                        i += 1
-                        continue
-
+                        if offset_dias == 0 and not cruza_noite: # Só adiciona dia extra se não for range complexo
+                             dt2 = criar_data_segura(contexto_ano, contexto_mes, int(partes[1]))
+                             if dt2: datas_deste_segmento.append(dt2)
+                        i += 1; continue
                     dia_start = int(tok)
                     if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                         alvo = tokens[i+2]
                         if alvo.isdigit():
-                            dia_end = int(alvo)
-                            lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end)
-                            datas_deste_segmento.extend(lista)
-                            i += 3
-                            continue
+                            datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, int(alvo)))
+                            i += 3; continue
                         elif alvo in MONTH_MAP:
                             mes_dest = MONTH_MAP[alvo]
                             if i + 3 < len(tokens) and tokens[i+3].isdigit():
-                                dia_dest = int(tokens[i+3])
-                                lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_dest)
-                                datas_deste_segmento.extend(lista)
-                                contexto_mes = mes_dest
-                                i += 4
-                                continue
-                    
+                                datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, int(tokens[i+3])))
+                                contexto_mes = mes_dest; i += 4; continue
                     dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
                     if dt: datas_deste_segmento.append(dt)
-                    i += 1
-                    continue
+                    i += 1; continue
                 i += 1
-            
-            # Herança Híbrida (Só dias mudaram, mantém datas)
-            if not datas_deste_segmento and ultima_lista_datas:
-                datas_deste_segmento = list(ultima_lista_datas)
+            if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
 
-        # --- SE NÃO ACHOU DATAS ESPECÍFICAS, MAS TEM 'DLY' ---
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
-            while curr <= dt_c:
-                datas_deste_segmento.append(curr)
-                curr += timedelta(days=1)
+            while curr <= dt_c: datas_deste_segmento.append(curr); curr += timedelta(days=1)
             achou_nova_definicao = True
         
-        # --- ATUALIZAÇÃO DA MEMÓRIA ---
         if achou_nova_definicao:
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
@@ -205,17 +217,24 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
-        # --- GERAÇÃO FINAL ---
+        # --- GERAÇÃO FINAL COM SUPORTE A OFFSET ---
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
 
-            if filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
+            # Se houver filtro de dia de início (caso SUN ... TIL TUE), só começa no dia certo
+            if filtro_dia_inicio is not None:
+                if dt_final.weekday() != filtro_dia_inicio:
+                    continue
+            elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
             s_ini = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
-            s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
-            if s_fim < s_ini: s_fim += timedelta(days=1)
+            s_fim = s_ini + timedelta(days=offset_dias)
+            s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
+            
+            # Correção para fim menor que início no mesmo dia (bug lógico do timedelta)
+            if s_fim < s_ini: s_fim += timedelta(days=1) 
             
             if s_fim < dt_b or s_ini > dt_c:
                 continue
