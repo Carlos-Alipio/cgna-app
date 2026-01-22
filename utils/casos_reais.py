@@ -218,4 +218,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "30/03/2026 09:00"
         }
     },
+    {
+        "id": "CASO_19",
+        "desc": "PERM no campo C (Fim = Início + 365 dias)",
+        "b": "2512122117",
+        "c": "PERM",
+        "d": "",
+        "esperado": {
+            "qtd_slots": 1,
+            "primeiro_inicio": "12/12/2025 21:17",
+            "ultimo_fim": "12/12/2026 21:17"
+        }
+    },
 ]
