@@ -16,7 +16,8 @@ WEEK_MAP = {
 def parse_notam_date(date_str):
     try:
         if not date_str: return None
-        clean_str = str(date_str).replace("-", "").replace(":", "").replace(" ", "").strip()
+        # Limpeza agressiva para garantir formato numérico
+        clean_str = ''.join(filter(str.isdigit, str(date_str)))
         if len(clean_str) == 10:
             return datetime.strptime(clean_str, "%y%m%d%H%M")
         elif len(clean_str) == 12:
@@ -35,9 +36,7 @@ def gerar_sequencia_datas(ano_base, mes_ini, dia_ini, mes_fim, dia_fim):
     dt_end = criar_data_segura(ano_base, mes_fim, dia_fim)
     
     if not dt_start or not dt_end: return []
-    
-    if dt_end < dt_start:
-        dt_end = dt_end.replace(year=ano_base + 1)
+    if dt_end < dt_start: dt_end = dt_end.replace(year=ano_base + 1)
         
     curr = dt_start
     while curr <= dt_end:
@@ -54,15 +53,13 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 def resolver_dia_semana_composto(token):
     if "/" in token:
         partes = token.split("/")
-        if partes[0] in WEEK_MAP:
-            return WEEK_MAP[partes[0]]
-    if token in WEEK_MAP:
-        return WEEK_MAP[token]
+        if partes[0] in WEEK_MAP: return WEEK_MAP[partes[0]]
+    if token in WEEK_MAP: return WEEK_MAP[token]
     return None
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V15: Suporte a Sintaxe Híbrida (JAN 18 1543 TIL 20 2129) e Semanas Cruzadas (SUN 0900 TIL TUE 2100).
+    V16: Estratégia Híbrida com Master Scanner para Semanas Cruzadas e Híbridos.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -75,15 +72,19 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     if not dt_b or not dt_c: return []
 
     slots = []
-    text = str(item_d_text).upper().strip() if item_d_text else ""
+    # 1. Sanitização: Remove quebras de linha e espaços duplos
+    text = str(item_d_text).upper()
+    text = " ".join(text.split())
+    
     contexto_ano = dt_b.year
 
-    # --- FASE 0: EXTRAÇÃO DE SLOTS ESPECIAIS (DATA+HORA MISTURADOS) ---
-    # Captura: JAN 18 1543 TIL 20 2129 ou JAN 18 1543 TIL JAN 20 2129
-    re_special = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
-    for match in re_special.finditer(text):
+    # --- FASE 0: EXTRAÇÃO DE "DATA + HORA" MISTURADOS (PEELING) ---
+    # Ex: JAN 18 1543 TIL 20 2129. Processa e remove do texto para não confundir a Fase 1.
+    re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
+    
+    for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
-        if not m2: m2 = m1 # Se mês 2 não existe, herda do 1
+        if not m2: m2 = m1
         
         if m1 in MONTH_MAP and m2 in MONTH_MAP:
             dt1 = criar_data_segura(contexto_ano, MONTH_MAP[m1], int(d1))
@@ -92,75 +93,76 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             if dt1 and dt2:
                 dt1 = ajustar_ano_referencia(dt1, dt_b)
                 dt2 = ajustar_ano_referencia(dt2, dt_b)
-                
                 start = dt1.replace(hour=int(h1[:2]), minute=int(h1[2:]))
                 end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
-                
-                # Ajuste de ano se virou
                 if end < start: end = end.replace(year=end.year + 1)
-
-                # Filtro de Bordas
+                
                 if not (end < dt_b or start > dt_c):
                     slots.append({'inicio': start, 'fim': end})
     
-    # Remove o texto processado para não confundir o parser principal
-    text = re_special.sub(' ', text)
+    # Substitui os trechos processados por espaços para manter os índices relativos se necessário,
+    # mas aqui vamos apenas remover já que a Fase 1 é linear.
+    text = re_hibrido.sub(' ', text)
 
-    # --- FASE 1: PARSER PRINCIPAL (AGORA COM SUPORTE A SEMANA ESTENDIDA) ---
-    # Captura: 0931-2129  OU  SUN 0931 TIL TUE 2129
-    re_horario_ext = re.compile(r'(?:(MON|TUE|WED|THU|FRI|SAT|SUN)\s+)?(\d{4})\s*(?:-|TIL)\s*(?:(MON|TUE|WED|THU|FRI|SAT|SUN)\s+)?(\d{4})')
-    matches = list(re_horario_ext.finditer(text))
+    # --- FASE 1: SCANNER MESTRE (SIMPLE vs COMPLEX) ---
+    # Grupo 1-4: Complexo (SUN ... TIL TUE)
+    # Grupo 5-6: Simples (0931-2129)
+    regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
+    regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
+    re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
+
+    matches = list(re_master.finditer(text))
     
     last_end = 0
     contexto_mes = dt_b.month
-    
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
-    # Se não houver horários E nenhum slot especial foi achado
     if not matches and not slots:
         return [{'inicio': dt_b, 'fim': dt_c}]
 
     for match in matches:
-        dia_semana_ini, h_ini_str, dia_semana_fim, h_fim_str = match.groups()
-        segmento = text[last_end:match.start()]
-        last_end = match.end()
+        # Determina qual padrão casou
+        c_dia_ini, c_hora_ini, c_dia_fim, c_hora_fim, s_hora_ini, s_hora_fim = match.groups()
         
-        # Análise de Offset Semanal (SUN ... TIL TUE)
+        is_complex = (c_dia_ini is not None)
+        
+        # Define horário e lógica de offset
         offset_dias = 0
         filtro_dia_inicio = None
         
-        if dia_semana_ini and dia_semana_fim:
-            idx_ini = WEEK_MAP[dia_semana_ini]
-            idx_fim = WEEK_MAP[dia_semana_fim]
-            # Filtro: só começa slot se o dia for o dia_semana_ini
-            filtro_dia_inicio = idx_ini
-            # Calcula duração em dias (Ex: Sun(6) até Tue(1) = 2 dias)
-            if idx_fim >= idx_ini:
-                offset_dias = idx_fim - idx_ini
-            else:
-                offset_dias = (7 - idx_ini) + idx_fim
-        
-        cruza_noite = int(h_fim_str) < int(h_ini_str)
-        if offset_dias == 0 and cruza_noite:
-            offset_dias = 1 # Cruzamento padrão de meia noite
+        if is_complex:
+            h_ini_str, h_fim_str = c_hora_ini, c_hora_fim
+            idx_ini = WEEK_MAP[c_dia_ini]
+            idx_fim = WEEK_MAP[c_dia_fim]
+            filtro_dia_inicio = idx_ini # Só cria slot se o dia for o dia de início
+            
+            if idx_fim >= idx_ini: offset_dias = idx_fim - idx_ini
+            else: offset_dias = (7 - idx_ini) + idx_fim
+        else:
+            h_ini_str, h_fim_str = s_hora_ini, s_hora_fim
+            if int(h_fim_str) < int(h_ini_str):
+                offset_dias = 1 # Cruzamento meia-noite padrão
+
+        # Extração de Datas do Segmento Anterior
+        segmento = text[last_end:match.start()]
+        last_end = match.end()
 
         datas_deste_segmento = []
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        # --- REUTILIZAÇÃO DA LÓGICA V14 PARA EXTRAÇÃO DE DATAS ---
+        # Tokenização e Parsing de Datas (Mesma lógica V14/V15)
         tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
         tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
-
+        
         tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
         tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
-        
+
         if tem_conteudo_data or tem_conteudo_semana:
             achou_nova_definicao = True
-            # [INSERIR AQUI A LÓGICA DE SCANNER V14 - RESUMIDA PARA CABER]
-            k = 0
-            while k < len(tokens): # Scanner Semana
+            k = 0 # Scanner Semana
+            while k < len(tokens):
                 tok = tokens[k]
                 idx_tok = resolver_dia_semana_composto(tok)
                 if idx_tok is not None:
@@ -174,8 +176,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                             k += 3; continue
                     filtro_semana_deste_segmento.add(idx_tok); k += 1
                 else: k += 1
-            i = 0
-            while i < len(tokens): # Scanner Datas
+            i = 0 # Scanner Datas
+            while i < len(tokens):
                 tok = tokens[i]
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
                 if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None): i += 1; continue
@@ -184,7 +186,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         partes = tok.split("/")
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                         if dt: datas_deste_segmento.append(dt)
-                        if offset_dias == 0 and not cruza_noite: # Só adiciona dia extra se não for range complexo
+                        if offset_dias == 0 and not is_complex: # Só adiciona dia extra se for simples
                              dt2 = criar_data_segura(contexto_ano, contexto_mes, int(partes[1]))
                              if dt2: datas_deste_segmento.append(dt2)
                         i += 1; continue
@@ -209,7 +211,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             curr = dt_b
             while curr <= dt_c: datas_deste_segmento.append(curr); curr += timedelta(days=1)
             achou_nova_definicao = True
-        
+
+        # Atualiza Memória
         if achou_nova_definicao:
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
@@ -217,15 +220,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
-        # --- GERAÇÃO FINAL COM SUPORTE A OFFSET ---
+        # --- GERAÇÃO FINAL ---
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
 
-            # Se houver filtro de dia de início (caso SUN ... TIL TUE), só começa no dia certo
-            if filtro_dia_inicio is not None:
+            # Lógica de Filtro Complexo (Semana Cruzada)
+            if is_complex and filtro_dia_inicio is not None:
+                # Se é SUN TIL TUE, a data base TEM que ser SUN.
                 if dt_final.weekday() != filtro_dia_inicio:
                     continue
+            # Lógica de Filtro Simples (WED/THU...)
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
@@ -233,8 +238,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = s_ini + timedelta(days=offset_dias)
             s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             
-            # Correção para fim menor que início no mesmo dia (bug lógico do timedelta)
-            if s_fim < s_ini: s_fim += timedelta(days=1) 
+            # Correção de bug de timedelta reverso no mesmo dia
+            if s_fim < s_ini: s_fim += timedelta(days=1)
             
             if s_fim < dt_b or s_ini > dt_c:
                 continue
