@@ -67,8 +67,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     # --- NOVO: SUPORTE A HORÁRIOS SOLARES (SR/SS) ---
     # Substitui as siglas SR/SS por horários padrão para processamento.
     # Futuramente, estes valores poderão ser buscados via API AISWEB por data/ICAO.
-    SR_PLACEHOLDER = "0600"
-    SS_PLACEHOLDER = "1800"
+    SR_PLACEHOLDER = "0800"
+    SS_PLACEHOLDER = "2000"
     text = re.sub(r'\bSR\b', SR_PLACEHOLDER, text)
     text = re.sub(r'\bSS\b', SS_PLACEHOLDER, text)
     
