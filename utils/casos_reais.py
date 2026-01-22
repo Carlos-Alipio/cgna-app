@@ -570,4 +570,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "26/03/2026 07:45"
         }
     },
+    {
+        "id": "CASO_48",
+        "desc": "Mix: Slot Único Inicial + Range Longo com Barras e Horário Longo (18h de duração)",
+        "b": "2601172015",
+        "c": "2604150400",
+        "d": "JAN 17/18 2015-0400 JAN 18/19 TIL APR 14/15 1000-0400",
+        "esperado": {
+            "qtd_slots": 88,
+            "primeiro_inicio": "17/01/2026 20:15",
+            "ultimo_fim": "15/04/2026 04:00"
+        }
+    },
 ]
