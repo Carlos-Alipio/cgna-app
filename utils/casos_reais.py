@@ -775,4 +775,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "19/04/2026 20:00"
         }
     },
+    {
+        "id": "CASO_65",
+        "desc": "Transição de Ano: Operação parcial SR no dia 1 e rotina DLY SR-SS (0800-2000) até Março",
+        "b": "2512031456",
+        "c": "2603022134",
+        "d": "DEC 03 1456-SS 04 TIL MAR 02 SR-SS",
+        "esperado": {
+            "qtd_slots": 90,
+            "primeiro_inicio": "03/12/2025 14:56",
+            "ultimo_fim": "02/03/2026 20:00"
+        }
+    },
 ]
