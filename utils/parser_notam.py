@@ -36,7 +36,6 @@ def gerar_sequencia_datas(ano_base, mes_ini, dia_ini, mes_fim, dia_fim):
     
     if not dt_start or not dt_end: return []
     
-    # Ajuste de virada de ano
     if dt_end < dt_start:
         dt_end = dt_end.replace(year=ano_base + 1)
         
@@ -54,7 +53,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V8: Suporte a Múltiplos Horários para a Mesma Lista (Herança de Datas).
+    V9: Correção do Filtro de Bordas (B e C) na Geração Final.
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = parse_notam_date(item_c_raw)
@@ -70,7 +69,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     contexto_ano = dt_b.year
     contexto_mes = dt_b.month
     
-    # MEMÓRIA DE CURTO PRAZO (para herança)
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
@@ -86,7 +84,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        # --- ANÁLISE DO SEGMENTO ---
         if "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c:
@@ -97,14 +94,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         else:
             tokens = re.findall(r'[A-Za-z]+|\d+', segmento)
             
-            # Se tiver tokens relevantes, processa. Se for vazio/sujeira, ignora.
             tem_conteudo_data = any(t in MONTH_MAP or t.isdigit() for t in tokens)
             tem_conteudo_semana = any(t in WEEK_MAP for t in tokens)
             
             if tem_conteudo_data or tem_conteudo_semana:
                 achou_nova_definicao = True
                 
-                # 1. SCANNER SEMANA
+                # Scanner Semana
                 k = 0
                 while k < len(tokens):
                     tok = tokens[k]
@@ -124,7 +120,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     else:
                         k += 1
                 
-                # 2. SCANNER DATAS
+                # Scanner Datas
                 i = 0
                 while i < len(tokens):
                     tok = tokens[i]
@@ -161,17 +157,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         continue
                     i += 1
         
-        # --- LÓGICA DE HERANÇA ---
         if achou_nova_definicao:
-            # Atualiza a memória
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
         else:
-            # Recupera da memória (Herança)
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
-        # --- GERAÇÃO FINAL ---
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
@@ -182,6 +174,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_ini = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
             s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
+            
+            # --- FILTRO DE BORDAS REINTRODUZIDO (A Correção) ---
+            # Garante que o slot esteja efetivamente dentro da vigência do NOTAM
+            # Margem de segurança removida ou ajustada para ser estrita conforme necessidade
+            if s_fim < dt_b or s_ini > dt_c:
+                continue
             
             slots.append({'inicio': s_ini, 'fim': s_fim})
 
