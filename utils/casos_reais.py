@@ -66,4 +66,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/01/2026 09:00" # Cronologicamente, dia 28 (Seg 1) é depois do dia 23 (Seg 2)
         }
     },
+    {
+        "id": "CASO_06",
+        "desc": "Range Multi-Mês (FEB-APR) com Filtro de Dia da Semana",
+        "b": "2601100400",
+        "c": "2604100759",
+        "d": "JAN 10 TIL 16 TUE WED THU FRI SAT 0400-0759 JAN 17 TIL 30 TUE WED THU FRI SAT 0440-0830 FEB 02 TIL APR 10 MON TUE 0500-0759",
+        "esperado": {
+            "qtd_slots": 35, # Número final validado
+            "primeiro_inicio": "10/01/2026 04:00",
+            "ultimo_fim": "07/04/2026 07:59" # Última Terça-feira (TUE) antes de 10/Abr
+        }
+    },
 ]
