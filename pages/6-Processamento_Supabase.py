@@ -3,7 +3,7 @@ import pandas as pd
 from utils import parser_notam
 # Importe aqui o arquivo onde você guardou a função get_connection
 # Se estiver em utils/database.py, use: from utils.database import get_connection
-from utils.db_connection import get_connection 
+from utils.db_manager import get_connection 
 
 st.set_page_config(page_title="Processamento Supabase", layout="wide")
 
