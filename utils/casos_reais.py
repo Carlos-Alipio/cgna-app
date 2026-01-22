@@ -534,4 +534,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "06/04/2026 10:00"
         }
     },
+    {
+        "id": "CASO_45",
+        "desc": "Multi-Segmento: Mudança de Dias e Horários (JAN-JAN, FEB-APR)",
+        "b": "2601100400",
+        "c": "2604100759",
+        "d": "JAN 10 TIL 16 TUE WED THU FRI SAT 0400-0759 JAN 17 TIL 30 TUE WED THU FRI SAT 0440-0830 FEB 02 TIL APR 10 MON TUE 0500-0759",
+        "esperado": {
+            "qtd_slots": 35,
+            "primeiro_inicio": "10/01/2026 04:00",
+            "ultimo_fim": "07/04/2026 07:59"
+        }
+    },
 ]
