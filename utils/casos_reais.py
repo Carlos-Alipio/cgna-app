@@ -329,4 +329,16 @@ CASOS_BLINDADOS = [
             # a data mais tardia é FEB 15.
         }
     },
+    {
+        "id": "CASO_28",
+        "desc": "O Chefão: Híbrido Data+Hora, Semanas Cruzadas e Dias com Barra (WED/THU)",
+        "b": "2601181543",
+        "c": "2604122359",
+        "d": "JAN 18 1543 TIL 20 2129 JAN 21 TIL JAN 31 SUN 0931 TIL TUE 2129 WED/THU FRI/SAT 0931-2129 FEB 01/02 0931-2359 FEB 03 0000-2029 FEB 04 TIL APR 11 SUN 0831 TIL TUE 2029 WED/THU FRI/SAT 0831-2029 APR 12 0831-2359",
+        "esperado": {
+            "qtd_slots": 63,
+            "primeiro_inicio": "18/01/2026 15:43",
+            "ultimo_fim": "12/04/2026 23:59"
+        }
+    },
 ]
