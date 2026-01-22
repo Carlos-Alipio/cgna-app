@@ -389,4 +389,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/03/2026 22:00"
         }
     },
+    {
+        "id": "CASO_33",
+        "desc": "Complexo: Datas órfãs (27) herdando horário do próximo grupo",
+        "b": "2511201300",
+        "c": "2601251210",
+        "d": "NOV 20 1300-1410 27 DEC 05 13 21 1100-1210 31 1000-1110 JAN 08 16 25 1100-1210",
+        "esperado": {
+            "qtd_slots": 9,
+            "primeiro_inicio": "20/11/2025 13:00",
+            "ultimo_fim": "25/01/2026 12:10"
+        }
+    },
 ]
