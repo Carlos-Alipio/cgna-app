@@ -799,4 +799,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "08/03/2026 20:00"
         }
     },
+    {
+        "id": "CASO_67",
+        "desc": "Pernoite Solar: DLY SS-SR (2000-0800) validando offset automático",
+        "b": "2601222000",
+        "c": "2601260800",
+        "d": "DLY SS-SR",
+        "esperado": {
+            "qtd_slots": 4,
+            "primeiro_inicio": "22/01/2026 20:00",
+            "ultimo_fim": "26/01/2026 08:00"
+        }
+    },
 ]
