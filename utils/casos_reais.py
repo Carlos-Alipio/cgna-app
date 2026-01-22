@@ -114,4 +114,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "09/04/2026 07:59"
         }
     },
+    {
+        "id": "CASO_10",
+        "desc": "Múltiplos Horários na mesma lista (Herança)",
+        "b": "2601170340",
+        "c": "2602150820",
+        "d": "JAN 17 18 20 22 24 25 27 29 31 FEB 01 TIL 15 0340-0820 JAN 19 21 23 26 28 30 0340-0820 0915-1200",
+        "esperado": {
+            "qtd_slots": 36,
+            "primeiro_inicio": "17/01/2026 03:40",
+            "ultimo_fim": "15/02/2026 08:20"
+        }
+    },
 ]
