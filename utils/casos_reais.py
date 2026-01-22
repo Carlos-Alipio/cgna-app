@@ -594,4 +594,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "05/02/2026 02:00"
         }
     },
+    {
+        "id": "CASO_50",
+        "desc": "Marco Final: Mix de Slot Único + Range Longo (NOV-FEB) com barras e overnight",
+        "b": "2511101830",
+        "c": "2602080400",
+        "d": "NOV 10/11 1830-0400 NOV 11/12 TIL FEB 07/08 1000-0400",
+        "esperado": {
+            "qtd_slots": 90,
+            "primeiro_inicio": "10/11/2025 18:30",
+            "ultimo_fim": "08/02/2026 04:00"
+        }
+    }
 ]
