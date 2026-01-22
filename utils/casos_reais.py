@@ -703,4 +703,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "29/03/2026 04:00"
         }
     },
+    {
+        "id": "CASO_59",
+        "desc": "Dois blocos diários distintos (Jan e Fev) com um intervalo de 8 dias sem atividade",
+        "b": "2601200845",
+        "c": "2602271340",
+        "d": "JAN 20 TIL 31 0845-1315 FEB 09 TIL 27 0840-1340",
+        "esperado": {
+            "qtd_slots": 31,
+            "primeiro_inicio": "20/01/2026 08:45",
+            "ultimo_fim": "27/02/2026 13:40"
+        }
+    },
 ]
