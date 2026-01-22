@@ -425,4 +425,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "25/01/2026 23:10"
         }
     },
+    {
+        "id": "CASO_36",
+        "desc": "Acumulação Multi-mensal (DEC/JAN/FEB) com Herança de Horário Final",
+        "b": "2511220945",
+        "c": "2602131000",
+        "d": "NOV 22 0945-1100 DEC 24 JAN 01 10 18 27 FEB 04 13 0845-1000",
+        "esperado": {
+            "qtd_slots": 8,
+            "primeiro_inicio": "22/11/2025 09:45",
+            "ultimo_fim": "13/02/2026 10:00"
+        }
+    },
 ]
