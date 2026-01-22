@@ -341,4 +341,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "12/04/2026 23:59"
         }
     },
+    {
+        "id": "CASO_29",
+        "desc": "Básico: Lista de Dias Consecutivos (Sem TIL)",
+        "b": "2601271245",
+        "c": "2601281400",
+        "d": "JAN 27 28 1245-1400",
+        "esperado": {
+            "qtd_slots": 2,
+            "primeiro_inicio": "27/01/2026 12:45",
+            "ultimo_fim": "28/01/2026 14:00"
+        }
+    },
 ]
