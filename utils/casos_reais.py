@@ -462,4 +462,16 @@ CASOS_BLINDADOS = [
             # O dia 13/02 é cronologicamente posterior ao dia 05/02 do último grupo.
         }
     },
+    {
+        "id": "CASO_39",
+        "desc": "Range Syntax: Intervalo com barras (DEC 19/20 TIL FEB 15/16)",
+        "b": "2512190900",
+        "c": "2602160259",
+        "d": "DEC 19/20 TIL FEB 15/16 0900-0259",
+        "esperado": {
+            "qtd_slots": 59,
+            "primeiro_inicio": "19/12/2025 09:00",
+            "ultimo_fim": "16/02/2026 02:59"
+        }
+    },
 ]
