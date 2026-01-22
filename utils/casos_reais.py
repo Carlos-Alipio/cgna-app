@@ -158,4 +158,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "18/03/2026 21:00"
         }
     },
+    {
+        "id": "CASO_14",
+        "desc": "DLY com Limites Exatos (Início e Fim coincidem com Horário)",
+        "b": "2602031200",
+        "c": "2602062000",
+        "d": "DLY 1200-2000",
+        "esperado": {
+            "qtd_slots": 4,
+            "primeiro_inicio": "03/02/2026 12:00",
+            "ultimo_fim": "06/02/2026 20:00"
+        }
+    },
 ]
