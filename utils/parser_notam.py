@@ -110,12 +110,12 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     y = dt_b.year
     contexto_mes = dt_b.strftime("%b").upper()
     
-    # --- MEMÓRIA DE CONTEXTO ---
-    # Usada quando o segmento entre horários é vazio (ex: "1000-1100 1400-1500")
+    # --- MEMÓRIA DE CONTEXTO EXPANDIDA ---
     last_contexto = {
-        'validade': None,
-        'dias_filtro': set(),
-        'is_dly': False
+        'validade': None,        # (ini, fim) para ranges
+        'dias_filtro': set(),    # {0, 2, 4} para dias da semana
+        'datas_pontuais': [],    # [datetime1, datetime2] para dias soltos (NOVO!)
+        'is_dly': False          # Flag DLY
     }
 
     for match in matches:
@@ -128,28 +128,26 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         fim_dt_seg = None
         achou_data = False
         dias_filtro = set()
+        datas_pontuais = [] # Nova variável local
         is_dly = False
 
-        # Verifica se o segmento tem conteúdo real (letras/números)
         tem_conteudo = bool(re.search(r'[A-Z0-9]', segmento))
 
         if not tem_conteudo:
             # === HERANÇA DE CONTEXTO ===
-            # Se o segmento é vazio (ex: espaço entre horários), herda do anterior
             ini_dt_seg, fim_dt_seg = last_contexto['validade'] if last_contexto['validade'] else (None, None)
             dias_filtro = last_contexto['dias_filtro'].copy()
+            datas_pontuais = last_contexto['datas_pontuais'].copy() # Herda a lista de datas
             is_dly = last_contexto['is_dly']
             
-            if ini_dt_seg: achou_data = True
+            if ini_dt_seg or datas_pontuais: achou_data = True
             
         else:
             # === PARSE DE NOVO CONTEXTO ===
             
-            # Checagem de DLY
-            if "DLY" in segmento or "DAILY" in segmento:
-                is_dly = True
+            if "DLY" in segmento or "DAILY" in segmento: is_dly = True
 
-            # ETAPA 0: DATA COM BARRA (DEC 01/02)
+            # ETAPA 0: DATA COM BARRA
             m_barra = RE_DATA_BARRA.search(segmento)
             if m_barra:
                 m1, d1, d2 = m_barra.groups()
@@ -168,7 +166,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         achou_data = True
                         contexto_mes = m1 
 
-                        # Lógica Evento Único
                         diff_dias = (fim_dt_seg - ini_dt_seg).days
                         vira_noite = verifica_virada_noite(horario_str)
                         if diff_dias == 1 and vira_noite:
@@ -225,7 +222,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                 if numeros_encontrados:
                     mes_num = MONTH_MAP.get(contexto_mes)
                     if mes_num:
-                        datas_pontuais = []
                         for m_num in numeros_encontrados:
                             dia_num = int(m_num.group(1))
                             if 1 <= dia_num <= 31: 
@@ -236,35 +232,36 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                                 except: pass
                         if datas_pontuais:
                             achou_data = True
-                            # Dias soltos não entram na "memória de range" usual
-                            # geramos aqui direto
-                            for dt in datas_pontuais:
-                                resultado.extend(extrair_horarios(horario_str, dt))
             
             # ATUALIZA A MEMÓRIA PARA O PRÓXIMO LOOP
-            last_contexto['validade'] = (ini_dt_seg, fim_dt_seg) if (ini_dt_seg and fim_dt_seg) else last_contexto['validade']
-            last_contexto['dias_filtro'] = dias_filtro if dias_filtro else last_contexto['dias_filtro']
-            last_contexto['is_dly'] = is_dly if is_dly else last_contexto['is_dly']
-
-            # Se achamos novos dias de filtro ou ranges, limpamos a herança antiga de datas
-            # (Exceção: DLY geralmente persiste)
-            if achou_data: last_contexto['validade'] = (ini_dt_seg, fim_dt_seg)
+            # Se achou dados novos, substitui a memória. Se não, mantém a anterior (se vazio) ou reseta.
+            
+            if achou_data:
+                # Prioridade: Datas Pontuais zeram Validade e vice-versa, pois são modos excludentes
+                if datas_pontuais:
+                    last_contexto['datas_pontuais'] = datas_pontuais
+                    last_contexto['validade'] = None # Anula range anterior
+                elif ini_dt_seg and fim_dt_seg:
+                    last_contexto['validade'] = (ini_dt_seg, fim_dt_seg)
+                    last_contexto['datas_pontuais'] = [] # Anula lista anterior
+            
             if dias_filtro: last_contexto['dias_filtro'] = dias_filtro
+            if is_dly: last_contexto['is_dly'] = True
 
         # --- GERAÇÃO FINAL DO SEGMENTO ---
         
-        # Se achou data válida (Range ou Memória)
-        if achou_data or (ini_dt_seg and fim_dt_seg):
-            # Se foi gerado na Etapa 4 (dias soltos), achou_data é True mas ini_dt_seg pode ser None
-            # se ini_dt_seg existe, é range contínuo
-            if ini_dt_seg and fim_dt_seg:
-                resultado.extend(gerar_dias_entre(ini_dt_seg, fim_dt_seg, dias_filtro, horario_str))
+        # Modo 1: Datas Pontuais (Prioridade máxima se existir)
+        if datas_pontuais:
+             for dt in datas_pontuais:
+                resultado.extend(extrair_horarios(horario_str, dt))
         
-        # Fallback: Sem data específica, aplica ao período total (B a C)
-        elif not achou_data:
-             # Se tem DLY ou dias da semana explícitos ou herdados
-             if is_dly or dias_filtro:
-                resultado.extend(gerar_dias_entre(dt_b, dt_c, dias_filtro, horario_str))
+        # Modo 2: Range Contínuo (ou memória de range)
+        elif ini_dt_seg and fim_dt_seg:
+            resultado.extend(gerar_dias_entre(ini_dt_seg, fim_dt_seg, dias_filtro, horario_str))
+        
+        # Modo 3: Fallback (Período Total do NOTAM)
+        elif is_dly or dias_filtro:
+            resultado.extend(gerar_dias_entre(dt_b, dt_c, dias_filtro, horario_str))
 
     # Filtragem Final
     resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=2)]
@@ -296,7 +293,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
     text = item_d_text.upper().strip()
-    # Limpeza básica (sem remover espaços internos dos horários)
     text = text.replace('\n', ' ').replace('\t', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = text.replace(u'\xa0', u' ')
 
