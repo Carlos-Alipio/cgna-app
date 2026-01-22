@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V17: Tokenizador Simplificado (Robustez para WED/THU) e Lógica Híbrida.
+    V18: Range Intelligence. Suporte a intervalos com sintaxe composta (19/20 TIL 15/16).
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -63,11 +63,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     slots = []
     text = str(item_d_text).upper()
-    text = " ".join(text.split()) # Sanitização básica
+    text = " ".join(text.split())
     
     contexto_ano = dt_b.year
 
-    # --- FASE 0: PEELING (Extração Cirúrgica de Data+Hora misturados) ---
+    # --- FASE 0: PEELING ---
     re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
     for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
@@ -122,8 +122,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        # --- TOKENIZADOR SIMPLIFICADO (V17) ---
-        # Captura qualquer bloco de letras/números/barras. Ex: "WED/THU" vira um token só.
         tokens = re.findall(r'[A-Za-z0-9/]+', segmento)
         
         tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
@@ -132,19 +130,16 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         if tem_conteudo_data or tem_conteudo_semana:
             achou_nova_definicao = True
             
-            # --- SCANNER DE SEMANA (Busca WED/THU, FRI, etc) ---
+            # Scanner de Semana
             k = 0 
             while k < len(tokens):
                 tok = tokens[k]
-                
-                # Caso Composto com Barra (WED/THU)
                 if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
                     for p in partes:
                         if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     k += 1; continue
                 
-                # Caso Simples (WED) ou Intervalo (WED TIL FRI)
                 if tok in WEEK_MAP:
                     idx_tok = WEEK_MAP[tok]
                     if k + 2 < len(tokens) and tokens[k+1] == "TIL":
@@ -159,19 +154,36 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     filtro_semana_deste_segmento.add(idx_tok); k += 1
                 else: k += 1
             
-            # --- SCANNER DE DATAS (Busca JAN 18, 21, etc) ---
+            # Scanner de Datas (Com lógica V18 de Range)
             i = 0 
             while i < len(tokens):
                 tok = tokens[i]
-                
-                # Pula tokens de semana para não confundir
                 if tok in WEEK_MAP or ("/" in tok and not tok[0].isdigit()): i += 1; continue
                 if tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or ("/" in tokens[i-1] and not tokens[i-1][0].isdigit())): i += 1; continue
 
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
                 
                 if tok[0].isdigit():
-                    if "/" in tok: # Data Composta Ex: 01/02
+                    # Verifica se é um Range (TIL) ANTES de processar a barra
+                    is_range = False
+                    if i + 2 < len(tokens) and tokens[i+1] == "TIL":
+                        alvo = tokens[i+2]
+                        # Extrai o dia inicial (mesmo que seja 19/20, pega 19)
+                        dia_start = int(tok.split("/")[0])
+                        
+                        if alvo[0].isdigit():
+                            dia_end = int(alvo.split("/")[0])
+                            datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end))
+                            i += 3; continue
+                        elif alvo in MONTH_MAP:
+                            mes_dest = MONTH_MAP[alvo]
+                            if i + 3 < len(tokens) and tokens[i+3][0].isdigit():
+                                dia_end = int(tokens[i+3].split("/")[0])
+                                datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_end))
+                                contexto_mes = mes_dest; i += 4; continue
+
+                    # Se não foi range, processa como data simples ou composta
+                    if "/" in tok: 
                         partes = tok.split("/")
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                         if dt: datas_deste_segmento.append(dt)
@@ -179,20 +191,10 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                              dt2 = criar_data_segura(contexto_ano, contexto_mes, int(partes[1]))
                              if dt2: datas_deste_segmento.append(dt2)
                         i += 1; continue
-                    dia_start = int(tok)
-                    if i + 2 < len(tokens) and tokens[i+1] == "TIL":
-                        alvo = tokens[i+2]
-                        if alvo.isdigit():
-                            datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, int(alvo)))
-                            i += 3; continue
-                        elif alvo in MONTH_MAP:
-                            mes_dest = MONTH_MAP[alvo]
-                            if i + 3 < len(tokens) and tokens[i+3].isdigit():
-                                datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, int(tokens[i+3])))
-                                contexto_mes = mes_dest; i += 4; continue
-                    dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
-                    if dt: datas_deste_segmento.append(dt)
-                    i += 1; continue
+                    else:
+                        dt = criar_data_segura(contexto_ano, contexto_mes, int(tok))
+                        if dt: datas_deste_segmento.append(dt)
+                        i += 1; continue
                 i += 1
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
         elif "DLY" in segmento or "DAILY" in segmento:
