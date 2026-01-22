@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import parser_notam, casos_reais # Importa nosso cofre
+from utils import parser_notam, casos_reais
 
 st.set_page_config(page_title="Lab Parser Blindado", layout="wide")
 
@@ -11,37 +11,22 @@ st.title("🛡️ Laboratório com Regressão Automática")
 # 0. FUNÇÃO AUXILIAR DE CONVERSÃO DE INPUT
 # ==============================================================================
 def converter_input_para_raw(texto_input):
-    """
-    Transforma inputs variados (ex: '01/02/2026 04:40' ou '2602010440') 
-    no formato padrão NOTAM (YYMMDDHHMM)
-    """
     if not texto_input: return ""
-    
-    # Remove tudo que não é número
     limpo = ''.join(filter(str.isdigit, str(texto_input)))
-    
-    # Caso 1: Formato Humano Completo (DDMMYYYYHHMM) -> 12 dígitos
-    # Ex: 010220260440 (vindo de 01/02/2026 04:40)
-    if len(limpo) == 12:
+    if len(limpo) == 12: # DDMMYYYYHHMM
         dia = limpo[0:2]
         mes = limpo[2:4]
-        ano = limpo[6:8] # Pega os 2 últimos dígitos do ano (2026 -> 26)
+        ano = limpo[6:8]
         hora = limpo[8:12]
         return f"{ano}{mes}{dia}{hora}"
-        
-    # Caso 2: Já está no formato NOTAM (YYMMDDHHMM) -> 10 dígitos
-    elif len(limpo) == 10:
+    elif len(limpo) == 10: # YYMMDDHHMM
         return limpo
-        
-    # Caso 3: Formato Curto (DDMMYYHHMM) -> 10 dígitos (raro, mas possível)
-    # Assume que é NOTAM direto
     return limpo
 
 # ==============================================================================
-# 1. MOTOR DE REGRESSÃO (RODA AUTOMATICAMENTE)
+# 1. MOTOR DE REGRESSÃO
 # ==============================================================================
 st.sidebar.header("🚦 Status da Regressão")
-
 falhas = []
 sucessos = 0
 
@@ -50,10 +35,17 @@ for caso in casos_reais.CASOS_BLINDADOS:
         slots = parser_notam.interpretar_periodo_atividade(
             caso['d'], "TESTE", caso['b'], caso['c']
         )
-        
         qtd_atual = len(slots)
-        primeiro_ini = slots[0]['inicio'].strftime("%d/%m/%Y %H:%M") if qtd_atual > 0 else "N/A"
-        ultimo_fim = sorted(slots, key=lambda x: x['inicio'])[-1]['fim'].strftime("%d/%m/%Y %H:%M") if qtd_atual > 0 else "N/A"
+        
+        # Formatação segura para evitar erros em listas vazias
+        if qtd_atual > 0:
+            primeiro_ini = slots[0]['inicio'].strftime("%d/%m/%Y %H:%M")
+            # Ordena para garantir que pegamos o último cronológico
+            slots_sorted = sorted(slots, key=lambda x: x['fim'])
+            ultimo_fim = slots_sorted[-1]['fim'].strftime("%d/%m/%Y %H:%M")
+        else:
+            primeiro_ini = "N/A"
+            ultimo_fim = "N/A"
             
         esp = caso['esperado']
         erros_caso = []
@@ -84,27 +76,26 @@ else:
 st.divider()
 
 # ==============================================================================
-# 2. ÁREA DE TESTE DO NOVO CASO
+# 2. ÁREA DE TESTE
 # ==============================================================================
 st.subheader("🔬 Testar Novo Caso")
 
 col_b, col_c = st.columns(2)
-
 with col_b:
-    input_b = st.text_input("Início (B)", placeholder="Cole aqui: 01/02/2026 04:40")
+    input_b = st.text_input("Início (B)", placeholder="Ex: 30/12/2025 18:09")
     raw_b = converter_input_para_raw(input_b)
-    if raw_b: st.caption(f"Interpretado (RAW): `{raw_b}`")
+    if raw_b: st.caption(f"Interpretado: `{raw_b}`")
 
 with col_c:
-    input_c = st.text_input("Fim (C)", placeholder="Cole aqui: 26/03/2026 07:45")
+    input_c = st.text_input("Fim (C)", placeholder="Ex: 30/03/2026 09:00")
     raw_c = converter_input_para_raw(input_c)
-    if raw_c: st.caption(f"Interpretado (RAW): `{raw_c}`")
+    if raw_c: st.caption(f"Interpretado: `{raw_c}`")
 
-texto_d = st.text_area("Texto Item D:", height=100, placeholder="Cole o texto do período aqui...")
+texto_d = st.text_area("Texto Item D:", height=100)
 
 if st.button("Processar", type="primary"):
     if not raw_b or not raw_c:
-        st.warning("⚠️ Preencha as datas de Início e Fim corretamente.")
+        st.warning("Preencha as datas B e C.")
     else:
         try:
             slots = parser_notam.interpretar_periodo_atividade(texto_d, "TESTE", raw_b, raw_c)
@@ -113,15 +104,14 @@ if st.button("Processar", type="primary"):
                 st.warning("Nenhum slot gerado.")
             else:
                 df = pd.DataFrame(slots)
-                # Ordena
                 df = df.sort_values('inicio')
                 
-                # Dados para o Cofre
+                # Dados para Copiar/Colar no JSON
                 p_ini = df.iloc[0]['inicio'].strftime('%d/%m/%Y %H:%M')
                 u_fim = df.iloc[-1]['fim'].strftime('%d/%m/%Y %H:%M')
                 
-                st.info("👇 **Snippet para `casos_reais.py`:**")
-                code = f"""
+                st.info("👇 **Snippet JSON:**")
+                st.code(f"""
     {{
         "id": "CASO_NOVO",
         "desc": "...",
@@ -133,13 +123,21 @@ if st.button("Processar", type="primary"):
             "primeiro_inicio": "{p_ini}",
             "ultimo_fim": "{u_fim}"
         }}
-    }},"""
-                st.code(code, language="python")
+    }},""", language="python")
                 
-                # Tabela Visual
+                # --- VISUALIZAÇÃO INTELIGENTE (A Correção) ---
                 df['Dia'] = df['inicio'].dt.strftime('%d/%m/%Y (%a)')
                 df['Início'] = df['inicio'].dt.strftime('%H:%M')
-                df['Fim'] = df['fim'].dt.strftime('%H:%M')
+                
+                # Função para formatar o FIM: Mostra data se for dia diferente
+                def formatar_fim(row):
+                    if row['inicio'].date() == row['fim'].date():
+                        return row['fim'].strftime('%H:%M')
+                    else:
+                        # Destaca a data final se for diferente da inicial
+                        return row['fim'].strftime('%d/%m/%Y %H:%M')
+                
+                df['Fim'] = df.apply(formatar_fim, axis=1)
                 
                 st.metric("Slots Gerados", len(df))
                 st.dataframe(df[['Dia', 'Início', 'Fim']], use_container_width=True, height=400)
