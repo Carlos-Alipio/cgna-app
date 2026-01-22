@@ -787,4 +787,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "02/03/2026 20:00"
         }
     },
+    {
+        "id": "CASO_66",
+        "desc": "Rotina Solar: DLY SR-SS (0800-2000) com clipping no início pelo Limite B (08:33)",
+        "b": "2512100833",
+        "c": "2603082130",
+        "d": "DEC 10 TIL MAR 08 SR-SS",
+        "esperado": {
+            "qtd_slots": 89,
+            "primeiro_inicio": "10/12/2025 08:33",
+            "ultimo_fim": "08/03/2026 20:00"
+        }
+    },
 ]
