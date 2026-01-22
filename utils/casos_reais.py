@@ -365,4 +365,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/03/2026 11:00"
         }
     },
+    {
+        "id": "CASO_31",
+        "desc": "Datas Disjuntas com Minutos Quebrados e Limite C Exato",
+        "b": "2602021201",
+        "c": "2603282059",
+        "d": "FEB 02 11 20 MAR 01 09 18 1201-2159 MAR 28 1101-2059",
+        "esperado": {
+            "qtd_slots": 7,
+            "primeiro_inicio": "02/02/2026 12:01",
+            "ultimo_fim": "28/03/2026 20:59"
+        }
+    },
 ]
