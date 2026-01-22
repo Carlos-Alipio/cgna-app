@@ -44,3 +44,5 @@ urllib3==2.6.1
 watchdog==6.0.0
 xmltodict==1.0.2
 supabase
+psycopg2-binary
+xlsxwriter
