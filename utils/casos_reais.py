@@ -90,4 +90,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/01/2026 20:00"
         }
     },
+    {
+        "id": "CASO_08",
+        "desc": "Range de Dias da Semana (TUE TIL SAT)",
+        "b": "2601120340",
+        "c": "2602140750",
+        "d": "JAN 12 TIL 15 17 TIL 22 24 TIL 30 0340-0750 FEV 03 TIL 14 TUE TIL SAT 0340-0750",
+        "esperado": {
+            "qtd_slots": 27,
+            "primeiro_inicio": "12/01/2026 03:40",
+            "ultimo_fim": "14/02/2026 07:50"
+        }
+    },
 ]
