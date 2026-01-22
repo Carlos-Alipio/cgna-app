@@ -715,4 +715,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "27/02/2026 13:40"
         }
     },
+    {
+        "id": "CASO_60",
+        "desc": "Teste de Estresse: Três camadas, overlaps intencionais e filtros semanais",
+        "b": "2512012133",
+        "c": "2602281630",
+        "d": "DEC 01/02 2133-0115 DEC 02 TIL FEB 28 MON TUE THU 0745-1630 WED FRI 1020-1600 SAT 0745-1630 DEC 02 TIL JAN 30 MON/TUE TIL THU/FRI 1940-0115 FRI/SAT 2040-0115",
+        "esperado": {
+            "qtd_slots": 130,
+            "primeiro_inicio": "01/12/2025 21:33",
+            "ultimo_fim": "28/02/2026 16:30"
+        }
+    },
 ]
