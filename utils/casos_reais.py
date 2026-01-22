@@ -811,4 +811,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "26/01/2026 08:00"
         }
     },
+    {
+        "id": "CASO_68",
+        "desc": "Híbrido Solar: Transição de abertura isolada (B) para rotina TIL SR-SS (0800-2000)",
+        "b": "2512171958",
+        "c": "2603112128",
+        "d": "DEC 17 1958-SS DEC 18 TIL MAR 11 SR-SS",
+        "esperado": {
+            "qtd_slots": 85,
+            "primeiro_inicio": "17/12/2025 19:58",
+            "ultimo_fim": "11/03/2026 20:00"
+        }
+    },
 ]
