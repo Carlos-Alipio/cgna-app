@@ -1,172 +1,198 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from utils import parser_notam, db_manager
+from utils import parser_notam
 
-st.set_page_config(page_title="Lab Parser Item D", layout="wide")
-st.title("🛠️ Laboratório de Testes: Parser NOTAM")
-st.markdown("Ferramenta de **auditoria visual** para validar a interpretação dos NOTAMs.")
-
-tab_manual, tab_banco = st.tabs(["🧪 Teste Manual", "💾 Auditoria do Banco de Dados"])
+st.set_page_config(page_title="Validador de Regressão", layout="wide")
+st.title("🛡️ Validador de Regressão (Parser NOTAM)")
+st.markdown("Esta ferramenta testa o parser contra todos os casos críticos conhecidos simultaneamente.")
 
 # ==============================================================================
-# ABA 1: TESTE MANUAL (Para simular cenários específicos)
+# 1. DEFINIÇÃO DOS CASOS DE OURO (Baseado na sua imagem)
 # ==============================================================================
-with tab_manual:
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        st.subheader("1. Parâmetros")
-        dt_hoje = datetime.now()
-        dt_b = st.date_input("Início (Item B)", value=dt_hoje)
-        # Permite testar a lógica do PERM manualmente
-        str_c_manual = st.text_input("Fim (Item C)", value="PERM", help="Digite uma data (YYMMDDHHMM) ou 'PERM'")
-        
-        # Formata para o padrão do parser (YYMMDDHHMM)
-        str_b = dt_b.strftime("%y%m%d") + "0000"
-        
-    with c2:
-        st.subheader("2. Texto (Item D)")
-        exemplos = {
-            "Sem Texto (H24)": "",
-            "Padrão Diário": "DLY 0600-1200",
-            "Dias da Semana": "MON TIL FRI 1000/1600",
-        }
-        escolha = st.selectbox("Carregar Exemplo:", list(exemplos.keys()))
-        texto_padrao = exemplos[escolha]
-        item_d_input = st.text_area("Conteúdo do Item D:", value=texto_padrao, height=100)
-
-    if st.button("🔬 Analisar Cenário", type="primary"):
-        try:
-            # Chama o parser exatamente como o sistema chamaria
-            res = parser_notam.interpretar_periodo_atividade(item_d_input, "TESTE", str_b, str_c_manual)
-            
-            if not res:
-                st.warning("⚠️ Retorno vazio (Nenhuma atividade detectada ou erro de parse).")
-            else:
-                df_res = pd.DataFrame(res)
-                # Formatação para leitura humana
-                df_res['Dia'] = df_res['inicio'].dt.strftime('%d/%m/%Y (%a)')
-                df_res['Hora'] = df_res['inicio'].dt.strftime('%H:%M') + " - " + df_res['fim'].dt.strftime('%H:%M')
-                
-                c_res1, c_res2 = st.columns(2)
-                c_res1.success(f"✅ Identificados {len(df_res)} slots de atividade.")
-                
-                # Mostra a data final que o parser calculou (importante para validar o PERM)
-                dt_final_calc = res[-1]['fim']
-                c_res2.info(f"📅 Data Final Calculada: {dt_final_calc.strftime('%d/%m/%Y %H:%M')}")
-                
-                st.dataframe(df_res[['Dia', 'Hora']], use_container_width=True, height=300)
-        except Exception as e:
-            st.error(f"Erro na execução: {e}")
+CASOS_DE_OURO = [
+    {
+        "id": "LINHA_22_HERANCA",
+        "desc": "Herança de DLY com múltiplos horários",
+        "d": "DLY 1000-1030 2030-2100",
+        "b": "2312232030", "c": "2603182100",
+        "regra": "Deve gerar slots para AMBOS os horários (manhã e noite) todos os dias."
+    },
+    {
+        "id": "LINHA_21_DIAS_SOLTOS",
+        "desc": "Lista de dias numéricos soltos",
+        "d": "JAN 20 23 27 30 1100-1900 JAN 22 1600-2200 JAN 24 1100-1600 JAN 29 1600-2100",
+        "b": "2601201100", "c": "2601301900",
+        "regra": "Deve identificar dias 20, 23, 27, 30 individualmente."
+    },
+    {
+        "id": "LINHA_18_EVENTO_UNICO",
+        "desc": "Evento único cruzando a noite (DEC 01/02)",
+        "d": "DEC 01/02 2133-0115 DEC 02 TIL FEB 28 MON TUE THU 0745-1630...",
+        "b": "2512012133", "c": "2602281630",
+        "regra": "O dia 01/12 deve ter apenas UM slot iniciando às 21:33. Não pode haver slot iniciando dia 02 às 21:33."
+    },
+    {
+        "id": "LINHA_13_COMPLEXO",
+        "desc": "O Chefão: Dias soltos, Ranges, Meses e Herança Dupla",
+        "d": "JAN 17 18 20 22 24 25 27 29 31 FEB 01 TIL 15 0340-0820 JAN 19 21 23 26 28 30 0340-0820 0915-1200",
+        "b": "2601170340", "c": "2602150820",
+        "regra": "JAN 19, 21... devem ter DOIS horários cada (0340 e 0915)."
+    },
+    {
+        "id": "LINHA_11_WEEKDAY",
+        "desc": "Range de Datas com Dias da Semana",
+        "d": "JAN 10 TIL 16 TUE WED THU FRI SAT 0400-0759...",
+        "b": "2601100400", "c": "2604100759",
+        "regra": "Deve filtrar apenas os dias da semana citados dentro do intervalo de datas."
+    },
+    {
+        "id": "LINHA_17_PERM",
+        "desc": "Regra PERM (Sem texto)",
+        "d": "PERM", # Simulando texto vazio ou PERM
+        "b": "2512122117", "c": "PERM",
+        "regra": "Data Final deve ser projectada para 365 dias."
+    }
+]
 
 # ==============================================================================
-# ABA 2: AUDITORIA (Visualização do Banco Real)
+# 2. MOTOR DE TESTES
 # ==============================================================================
-with tab_banco:
-    st.subheader("🕵️ Auditoria: Supabase")
+
+def executar_testes():
+    resultados = []
     
-    # Botão único e simples para recarregar a visualização
-    if st.button("🔄 Atualizar Tabela", type="primary"):
-        st.session_state['force_load'] = True
-
-    if st.session_state.get('force_load', False):
-        with st.spinner("Lendo dados do banco..."):
-            df_full = db_manager.carregar_notams()
+    for caso in CASOS_DE_OURO:
+        try:
+            # Executa o Parser Atual
+            slots = parser_notam.interpretar_periodo_atividade(
+                caso['d'], "TESTE", caso['b'], caso['c']
+            )
             
-            if df_full.empty:
-                st.warning("O Banco de Dados está vazio.")
+            # Análise Básica dos Resultados
+            qtd_slots = len(slots)
+            status = "❓ Analisar"
+            cor = "gray"
+            msg = ""
+
+            # Validações Específicas (Regras de Negócio)
+            if caso['id'] == "LINHA_22_HERANCA":
+                # Verifica se temos slots começando com hora ~10 e hora ~20
+                tem_manha = any(s['inicio'].hour == 10 for s in slots)
+                tem_noite = any(s['inicio'].hour == 20 for s in slots)
+                if tem_manha and tem_noite:
+                    status = "✅ SUCESSO"
+                    cor = "green"
+                else:
+                    status = "❌ FALHA"
+                    cor = "red"
+                    msg = f"Manhã: {tem_manha}, Noite: {tem_noite}"
+
+            elif caso['id'] == "LINHA_18_EVENTO_UNICO":
+                # Verifica o dia 02/12
+                # Não deve ter início dia 02/12 às 21:33
+                erros = [s for s in slots if s['inicio'].day == 2 and s['inicio'].month == 12 and s['inicio'].hour == 21]
+                acerto = [s for s in slots if s['inicio'].day == 1 and s['inicio'].month == 12]
+                
+                if not erros and acerto:
+                    status = "✅ SUCESSO"
+                    cor = "green"
+                else:
+                    status = "❌ FALHA"
+                    cor = "red"
+                    msg = f"Slots errados no dia 02: {len(erros)}"
+
+            elif caso['id'] == "LINHA_13_COMPLEXO":
+                # Pega um dia de teste: JAN 19
+                slots_jan19 = [s for s in slots if s['inicio'].day == 19 and s['inicio'].month == 1]
+                # Esperamos 2 slots (0340 e 0915)
+                if len(slots_jan19) >= 2:
+                     status = "✅ SUCESSO"
+                     cor = "green"
+                else:
+                     status = "❌ FALHA"
+                     cor = "red"
+                     msg = f"JAN 19 teve {len(slots_jan19)} slots (esperado >= 2)"
+            
+            elif caso['id'] == "LINHA_21_DIAS_SOLTOS":
+                dias_encontrados = set(s['inicio'].day for s in slots if s['inicio'].month == 1)
+                esperados = {20, 23, 27, 30}
+                if esperados.issubset(dias_encontrados):
+                    status = "✅ SUCESSO"
+                    cor = "green"
+                else:
+                    status = "❌ FALHA"
+                    cor = "red"
+                    msg = f"Dias achados: {sorted(list(dias_encontrados))}"
+
+            elif caso['id'] == "LINHA_17_PERM":
+                # Verifica se o último slot está em 2026 (Dezembro)
+                ultimo = slots[-1]['fim']
+                if ultimo.year == 2026 and ultimo.month == 12:
+                    status = "✅ SUCESSO"
+                    cor = "green"
+                else:
+                    status = "❌ FALHA"
+                    cor = "red"
+                    msg = f"Data final: {ultimo}"
+
             else:
-                col_d = 'd'
-                # Filtra removendo NIL/NONE para focar no que importa
-                df_analise = df_full[~df_full[col_d].astype(str).str.upper().isin(["NIL", "NONE"])].copy()
-                
-                resultados = []
+                if qtd_slots > 0:
+                    status = "✅ OK (Gerou Dados)"
+                    cor = "green"
+                else:
+                    status = "⚠️ VAZIO"
+                    cor = "orange"
 
-                # Função auxiliar simples para datas
-                def parse_visual(val):
-                    s = str(val).strip().upper()
-                    clean = s.replace("-", "").replace(":", "").replace(" ", "")
-                    # Se for data padrão YYMMDDHHMM
-                    if len(clean) == 10 and clean.isdigit(): 
-                        return datetime.strptime(clean, "%y%m%d%H%M")
-                    # Se já vier como objeto datetime do pandas
-                    if isinstance(val, (datetime, pd.Timestamp)): 
-                        return val
-                    return None
+            resultados.append({
+                "ID": caso['id'],
+                "Descrição": caso['desc'],
+                "Status": status,
+                "Msg": msg,
+                "Slots Gerados": qtd_slots,
+                "Exemplo (1º Slot)": slots[0]['inicio'].strftime('%d/%m %H:%M') if slots else "-"
+            })
 
-                for idx, row in enumerate(df_analise.iterrows()):
-                    r = row[1]
-                    
-                    item_d = str(r[col_d]).strip()
-                    if item_d.lower() == 'nan': item_d = ""
-                    
-                    loc = r.get('loc', 'SB??')
-                    n_notam = r.get('n', '?')
-                    
-                    # Dados Crus do Banco
-                    raw_b = r.get('b', '')
-                    raw_c = r.get('c', '') 
+        except Exception as e:
+            resultados.append({
+                "ID": caso['id'],
+                "Descrição": caso['desc'],
+                "Status": "🔥 ERRO CRÍTICO",
+                "Msg": str(e),
+                "Slots Gerados": 0,
+                "Exemplo (1º Slot)": "-"
+            })
+    
+    return pd.DataFrame(resultados)
 
-                    dt_b_obj = parse_visual(raw_b)
-                    if not dt_b_obj: dt_b_obj = datetime.now()
-                    
-                    # SIMULAÇÃO DA REGRA ESTRITA DO CRONOGRAMA PARA VISUALIZAÇÃO
-                    # Aqui mostramos o que o gráfico vai "enxergar"
-                    data_final_exibicao = "Erro"
-                    
-                    # 1. Se tem PERM escrito no banco -> +365 dias
-                    if "PERM" in str(raw_c).upper():
-                        dt_final = dt_b_obj + timedelta(days=365)
-                        data_final_exibicao = f"{dt_final.strftime('%d/%m/%Y')} (PERM Calculado)"
-                        str_c_parser = "PERM" # Manda PERM pro parser saber
-                    else:
-                        # 2. Se tem data, usa a data
-                        dt_c_obj = parse_visual(raw_c)
-                        if dt_c_obj:
-                            data_final_exibicao = dt_c_obj.strftime('%d/%m/%Y %H:%M')
-                            str_c_parser = dt_c_obj.strftime("%y%m%d%H%M")
-                        else:
-                            data_final_exibicao = "Sem Data"
-                            str_c_parser = None
+# ==============================================================================
+# 3. INTERFACE
+# ==============================================================================
 
-                    # Executa o Parser para ver se gera slots
-                    str_b_parser = dt_b_obj.strftime("%y%m%d%H%M")
-                    
-                    status = "N/A"
-                    try:
-                        res = parser_notam.interpretar_periodo_atividade(item_d, loc, str_b_parser, str_c_parser)
-                        if res:
-                            status = "✅ OK"
-                            detalhe = f"{len(res)} slots gerados"
-                        else:
-                            status = "⚠️ Vazio"
-                            detalhe = "Parser não gerou horários"
-                    except Exception as e:
-                        status = "❌ Erro"
-                        detalhe = str(e)
+if st.button("🚀 RODAR BATERIA DE TESTES", type="primary"):
+    df_res = executar_testes()
+    
+    # Métricas
+    total = len(df_res)
+    sucessos = len(df_res[df_res['Status'].str.contains("SUCESSO") | df_res['Status'].str.contains("OK")])
+    falhas = total - sucessos
+    
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total de Casos", total)
+    k2.metric("Sucessos", sucessos)
+    k3.metric("Falhas", falhas, delta_color="inverse")
+    
+    # Tabela Colorida
+    st.dataframe(
+        df_res.style.applymap(lambda x: 'background-color: #d4edda; color: green' if 'SUCESSO' in str(x) else ('background-color: #f8d7da; color: red' if 'FALHA' in str(x) else ''), subset=['Status']),
+        use_container_width=True,
+        height=500
+    )
+    
+    if falhas == 0:
+        st.success("🏆 PARABÉNS! O Parser passou em todos os casos de regressão!")
+    else:
+        st.error("🚨 ATENÇÃO: Há regressões. Não atualize o sistema ainda.")
 
-                    resultados.append({
-                        "LOC": loc,
-                        "NOTAM": n_notam,
-                        "Item D": item_d,
-                        "Início": dt_b_obj,
-                        "Fim (Banco/Regra)": data_final_exibicao,
-                        "Status Parser": status,
-                        "Detalhe": detalhe
-                    })
-                
-                df_audit = pd.DataFrame(resultados)
-                
-                st.divider()
-                st.metric("Total de NOTAMs Analisados", len(df_audit))
-                
-                st.dataframe(
-                    df_audit,
-                    use_container_width=True,
-                    column_config={
-                        "Item D": st.column_config.TextColumn("Texto (Item D)", width="large"),
-                        "Início": st.column_config.DatetimeColumn("Início", format="DD/MM/YYYY HH:mm"),
-                        "Status Parser": st.column_config.TextColumn("Status", width="small"),
-                    },
-                    height=600
-                )
+st.markdown("---")
+st.info("ℹ️ Use esta página sempre que alterar o `parser_notam.py`. O objetivo é manter todas as linhas VERDES.")
