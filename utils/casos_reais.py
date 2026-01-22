@@ -1,5 +1,3 @@
-from datetime import datetime
-
 # Lista de Casos que JÁ FUNCIONAM e não podem quebrar
 # Estrutura: Input (B, C, D) + Output Esperado (Snapshot)
 
@@ -10,7 +8,6 @@ CASOS_BLINDADOS = [
         "b": "2601260320",
         "c": "2602130750",
         "d": "DLY 0320-0750",
-        # O que esperamos? 19 dias consecutivos
         "esperado": {
             "qtd_slots": 19,
             "primeiro_inicio": "26/01/2026 03:20",
@@ -23,11 +20,10 @@ CASOS_BLINDADOS = [
         "b": "2601201100",
         "c": "2601301900",
         "d": "JAN 20 23 27 30 1100-1900 JAN 22 1600-2200 JAN 24 1100-1600 JAN 29 1600-2100",
-        # O que esperamos? 4 + 1 + 1 + 1 = 7 slots específicos
         "esperado": {
             "qtd_slots": 7,
             "primeiro_inicio": "20/01/2026 11:00",
-            "ultimo_fim": "30/01/2026 19:00" # O último cronológico é dia 30
+            "ultimo_fim": "30/01/2026 19:00"
         }
     },
     {
@@ -63,7 +59,7 @@ CASOS_BLINDADOS = [
         "esperado": {
             "qtd_slots": 30,
             "primeiro_inicio": "19/12/2025 03:01",
-            "ultimo_fim": "28/01/2026 09:00" # Cronologicamente, dia 28 (Seg 1) é depois do dia 23 (Seg 2)
+            "ultimo_fim": "28/01/2026 09:00"
         }
     },
     {
@@ -73,9 +69,9 @@ CASOS_BLINDADOS = [
         "c": "2604100759",
         "d": "JAN 10 TIL 16 TUE WED THU FRI SAT 0400-0759 JAN 17 TIL 30 TUE WED THU FRI SAT 0440-0830 FEB 02 TIL APR 10 MON TUE 0500-0759",
         "esperado": {
-            "qtd_slots": 35, # Número final validado
+            "qtd_slots": 35,
             "primeiro_inicio": "10/01/2026 04:00",
-            "ultimo_fim": "07/04/2026 07:59" # Última Terça-feira (TUE) antes de 10/Abr
+            "ultimo_fim": "07/04/2026 07:59"
         }
     },
     {
@@ -125,5 +121,5 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "17/01/2026 03:40",
             "ultimo_fim": "15/02/2026 08:20"
         }
-    },
+    }
 ]
