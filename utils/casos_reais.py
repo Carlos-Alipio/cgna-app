@@ -558,4 +558,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "09/04/2026 07:59"
         }
     },
+    {
+        "id": "CASO_47",
+        "desc": "Agrupamento Complexo: Listas e Ranges mistos com troca de horário final",
+        "b": "2602010440",
+        "c": "2603260745",
+        "d": "FEB 01 03 TIL 11 MAR 09 TIL 13 0440-0745 23 TIL 26 0450-0745",
+        "esperado": {
+            "qtd_slots": 19,
+            "primeiro_inicio": "01/02/2026 04:40",
+            "ultimo_fim": "26/03/2026 07:45"
+        }
+    },
 ]
