@@ -401,4 +401,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "25/01/2026 12:10"
         }
     },
+    {
+        "id": "CASO_34",
+        "desc": "Precisão de Minutos: Variação complexa com limites exatos em B e C",
+        "b": "2511201411",
+        "c": "2601252159",
+        "d": "NOV 20 1411-2359 27 DEC 05 13 21 1211-2159 31 1111-2059 JAN 08 16 25 1211-2159",
+        "esperado": {
+            "qtd_slots": 9,
+            "primeiro_inicio": "20/11/2025 14:11",
+            "ultimo_fim": "25/01/2026 21:59"
+        }
+    },
 ]
