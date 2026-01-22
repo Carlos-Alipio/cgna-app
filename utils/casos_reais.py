@@ -182,4 +182,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "12/02/2026 20:00"
         }
     },
+    {
+        "id": "CASO_16",
+        "desc": "Sintaxe com Barra (DEC 01/02 e MON/TUE) + Herança de Dias",
+        "b": "2512012133",
+        "c": "2602281630",
+        "d": "DEC 01/02 2133-0115 DEC 02 TIL FEB 28 MON TUE THU 0745-1630 WED FRI 1020-1600 SAT 0745-1630 DEC 02 TIL JAN 30 MON/TUE TIL THU/FRI 1940-0115 FRI/SAT 2040-0115",
+        "esperado": {
+            "qtd_slots": 122,
+            "primeiro_inicio": "01/12/2025 21:33",
+            "ultimo_fim": "28/02/2026 07:45"
+        }
+    }
 ]
