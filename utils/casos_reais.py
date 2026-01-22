@@ -522,4 +522,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "15/03/2026 21:30"
         }
     },
+    {
+        "id": "CASO_44",
+        "desc": "Overnight Range: Intervalo longo com barras e horário noturno (2200-1000)",
+        "b": "2601072200",
+        "c": "2604061000",
+        "d": "JAN 07/08 TIL APR 05/06 2200-1000",
+        "esperado": {
+            "qtd_slots": 89,
+            "primeiro_inicio": "07/01/2026 22:00",
+            "ultimo_fim": "06/04/2026 10:00"
+        }
+    },
 ]
