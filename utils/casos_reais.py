@@ -747,8 +747,8 @@ CASOS_BLINDADOS = [
         "d": "DLY SR-SS",
         "esperado": {
             "qtd_slots": 90,
-            "primeiro_inicio": "28/11/2025 06:00",
-            "ultimo_fim": "25/02/2026 18:00"
+            "primeiro_inicio": "28/11/2025 08:00",
+            "ultimo_fim": "25/02/2026 20:00"
         }
     },
 ]
