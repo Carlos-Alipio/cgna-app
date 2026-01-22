@@ -691,4 +691,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/01/2026 20:00"
         }
     },
+    {
+        "id": "CASO_58",
+        "desc": "Virada de Ano Crítica: Transição de slot único para range diário no dia 31/Dez",
+        "b": "2512301507",
+        "c": "2603290400",
+        "d": "DEC 30/31 1507-0400 DEC 31/JAN 01 TIL MAR 28/29 1000-0400",
+        "esperado": {
+            "qtd_slots": 89,
+            "primeiro_inicio": "30/12/2025 15:07",
+            "ultimo_fim": "29/03/2026 04:00"
+        }
+    },
 ]
