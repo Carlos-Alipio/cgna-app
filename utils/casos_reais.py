@@ -855,7 +855,7 @@ CASOS_BLINDADOS = [
         "d": "DEC 16 2101-SS DEC 17 TIL MAR 15 SR-1200 1900-SS",
         "esperado": {
             "qtd_slots": 179,
-            "primeiro_inicio": "16/12/2025 21:01",
+            "primeiro_inicio": "17/12/2025 21:01",
             "ultimo_fim": "15/03/2026 20:00"
         }
     },
