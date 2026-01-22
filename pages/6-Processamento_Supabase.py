@@ -1,142 +1,127 @@
 import streamlit as st
 import pandas as pd
-from supabase import create_client, Client
 from utils import parser_notam
+# Importe aqui o arquivo onde você guardou a função get_connection
+# Exemplo: se estiver em utils/db_connection.py
+from utils.db_manager import get_connection 
 
 st.set_page_config(page_title="Processamento Supabase", layout="wide")
 
-st.title("📊 Processamento em Lote (Supabase)")
-st.markdown("Busca NOTAMs com **Item D** preenchido, processa os horários e gera uma tabela analítica.")
+st.title("📊 Processamento em Lote (Via SQL)")
+st.markdown("Busca no Banco de Dados todos os NOTAMs com **Item D** preenchido e processa os horários.")
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO DA CONEXÃO
+# 1. ALGORITMO DE BUSCA E PROCESSAMENTO
 # ==============================================================================
-with st.expander("⚙️ Configurações de Conexão", expanded=True):
-    col1, col2 = st.columns(2)
+def processar_banco_dados():
+    # 1. CONEXÃO E QUERY
+    conn = get_connection()
     
-    # Tenta pegar dos secrets do Streamlit primeiro, senão pede input
-    # (Configure .streamlit/secrets.toml para não precisar digitar sempre)
-    sb_url = st.text_input("Supabase URL", value=st.secrets.get("SUPABASE_URL", ""))
-    sb_key = st.text_input("Supabase Key", value=st.secrets.get("SUPABASE_KEY", ""), type="password")
-    
-    table_name = st.text_input("Nome da Tabela", value="notams")
-    
-    # Mapeamento de Colunas (Caso seu banco tenha nomes diferentes)
-    c1, c2, c3, c4 = st.columns(4)
-    col_id = c1.text_input("Coluna ID/Código", value="notam_code")
-    col_b  = c2.text_input("Coluna Início (B)", value="date_begin")
-    col_c  = c3.text_input("Coluna Fim (C)", value="date_end")
-    col_d  = c4.text_input("Coluna Texto (D)", value="item_d")
-
-# ==============================================================================
-# 2. O ALGORITMO
-# ==============================================================================
-def buscar_e_processar():
-    if not sb_url or not sb_key:
-        st.error("Preencha a URL e a KEY do Supabase.")
-        return
-
-    # 1. CONEXÃO
-    try:
-        supabase: Client = create_client(sb_url, sb_key)
-    except Exception as e:
-        st.error(f"Erro ao conectar: {e}")
-        return
-
-    # 2. EXTRAÇÃO (Query)
-    with st.status("📡 Conectando ao Supabase...", expanded=True) as status:
-        st.write("Buscando NOTAMs com Item D preenchido...")
+    with st.status("📡 Acessando Banco de Dados...", expanded=True) as status:
+        st.write("Executando Query SQL...")
         
-        # Seleciona apenas as colunas necessárias para economizar banda
-        # Filtra onde item_d NÃO é nulo e NÃO é vazio
-        response = supabase.table(table_name)\
-            .select(f"{col_id}, {col_b}, {col_c}, {col_d}")\
-            .neq(col_d, "")\
-            .neq(col_d, "None")\
-            .execute()
-        
-        dados = response.data
-        total_notams = len(dados)
-        st.write(f"📦 {total_notams} NOTAMs encontrados para processamento.")
+        # Seleciona apenas as colunas essenciais
+        # Filtra onde 'd' não é nulo e não é vazio
+        # Ajuste os nomes das colunas conforme sua tabela (n, b, c, d)
+        try:
+            df_db = conn.query(
+                "SELECT n, b, c, d FROM notams WHERE d IS NOT NULL AND d <> ''", 
+                ttl=0
+            )
+        except Exception as e:
+            st.error(f"Erro na Query: {e}")
+            status.update(label="Falha na conexão", state="error")
+            return
+
+        total_notams = len(df_db)
+        st.write(f"📦 {total_notams} NOTAMs encontrados com Item D.")
         
         if total_notams == 0:
             status.update(label="Nenhum dado encontrado.", state="error")
             return
 
-        # 3. TRANSFORMAÇÃO (Parsing)
-        st.write("🔄 Interpretando horários com o Parser V13...")
+        # 2. TRANSFORMAÇÃO (Parsing)
+        st.write("🔄 Interpretando horários com Parser V13...")
         
         tabela_final = []
         erros = 0
         
         progress_bar = st.progress(0)
         
-        for i, row in enumerate(dados):
+        # Itera sobre o DataFrame do Pandas retornado pelo SQL
+        for index, row in df_db.iterrows():
             # Atualiza barra de progresso
-            progress_bar.progress((i + 1) / total_notams)
+            progress_bar.progress((index + 1) / total_notams)
             
             try:
-                raw_d = row.get(col_d, "")
-                raw_b = row.get(col_b, "")
-                raw_c = row.get(col_c, "")
-                codigo = row.get(col_id, "N/A")
+                # Mapeamento das colunas do seu banco
+                codigo = str(row['n'])
+                raw_b = str(row['b'])
+                raw_c = str(row['c'])
+                raw_d = str(row['d'])
                 
                 # CHAMA O NOSSO PARSER BLINDADO
+                # O parser vai ler o Item D e gerar N slots
                 slots = parser_notam.interpretar_periodo_atividade(raw_d, codigo, raw_b, raw_c)
                 
                 # EXPLOSÃO: Cria uma linha na tabela final para CADA slot gerado
                 for slot in slots:
                     tabela_final.append({
-                        "NOTAM Code": codigo,
+                        "NOTAM": codigo,
                         "Início Real": slot['inicio'],
                         "Fim Real": slot['fim'],
                         "Duração (h)": (slot['fim'] - slot['inicio']).total_seconds() / 3600,
-                        "Texto D": raw_d  # Opcional: manter o texto original para conferência
+                        "Item D Original": raw_d
                     })
                     
             except Exception as e:
                 erros += 1
-                # Opcional: Logar o erro
+                # print(f"Erro no NOTAM {row.get('n')}: {e}")
         
         status.update(label="Processamento Concluído!", state="complete")
 
-    # 4. EXIBIÇÃO E EXPORTAÇÃO
+    # 3. EXIBIÇÃO E EXPORTAÇÃO
     if tabela_final:
-        df = pd.DataFrame(tabela_final)
+        df_resultado = pd.DataFrame(tabela_final)
         
-        # Formatações visuais
-        df_show = df.copy()
+        # Formatações visuais para exibir na tela
+        df_show = df_resultado.copy()
         df_show['Início Real'] = df_show['Início Real'].dt.strftime('%d/%m/%Y %H:%M')
         df_show['Fim Real'] = df_show['Fim Real'].dt.strftime('%d/%m/%Y %H:%M')
         df_show['Duração (h)'] = df_show['Duração (h)'].round(2)
 
-        st.success(f"✅ Sucesso! Gerados {len(df)} slots de atividade a partir de {total_notams} NOTAMs.")
+        st.success(f"✅ Sucesso! Gerados {len(df_resultado)} slots de atividade a partir de {total_notams} NOTAMs.")
+        
         if erros > 0:
-            st.warning(f"⚠️ {erros} NOTAMs tiveram problemas de leitura.")
+            st.warning(f"⚠️ {erros} NOTAMs não puderam ser processados por erro de formatação.")
 
+        # Exibe a tabela
         st.dataframe(df_show, use_container_width=True)
         
         # Botão de Download Excel
-        # Requer: pip install openpyxl
         try:
             from io import BytesIO
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='Slots')
+                df_resultado.to_excel(writer, index=False, sheet_name='Slots Detalhados')
             excel_data = output.getvalue()
             
             st.download_button(
-                label="📥 Baixar Relatório em Excel",
+                label="📥 Baixar Relatório Completo (Excel)",
                 data=excel_data,
                 file_name="relatorio_slots_notams.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         except ImportError:
-            st.warning("Instale 'xlsxwriter' ou 'openpyxl' para habilitar o download em Excel.")
-            st.code("pip install xlsxwriter")
+            st.error("Biblioteca 'xlsxwriter' não instalada. Adicione ao requirements.txt para baixar Excel.")
 
 # ==============================================================================
-# 3. INTERFACE
+# 2. INTERFACE
 # ==============================================================================
-if st.button("🚀 Carregar e Processar", type="primary"):
-    buscar_e_processar()
+
+st.info("Esta ferramenta lê diretamente da tabela `notams` do seu banco de dados.")
+
+col1, col2 = st.columns([1, 4])
+with col1:
+    if st.button("🚀 Processar Agora", type="primary"):
+        processar_banco_dados()
