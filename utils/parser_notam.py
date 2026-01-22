@@ -49,9 +49,10 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.5: Inclui lógica de 1 minuto para janelas de abertura negativa e clipping total.
+    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
     """
     dt_b = parse_notam_date(item_b_raw)
+    
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
         if dt_b: dt_c = dt_b + timedelta(days=365)
@@ -63,7 +64,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     slots = []
     text = str(item_d_text).upper()
 
-    # --- PLACEHOLDERS SOLARES (Configuráveis) ---
+    # --- SUPORTE A HORÁRIOS SOLARES ---
     SR_PLACEHOLDER = "0800"
     SS_PLACEHOLDER = "2000"
     text = re.sub(r'\bSR\b', SR_PLACEHOLDER, text)
@@ -73,6 +74,26 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     text = re.sub(r'(\d+)/([A-Z]+)', r'\1 \2', text)
     
     contexto_ano = dt_b.year
+
+    # --- FASE 0: PEELING ---
+    re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
+    for match in re_hibrido.finditer(text):
+        m1, d1, h1, m2, d2, h2 = match.groups()
+        if not m2: m2 = m1
+        if m1 in MONTH_MAP and m2 in MONTH_MAP:
+            dt1 = criar_data_segura(contexto_ano, MONTH_MAP[m1], int(d1))
+            dt2 = criar_data_segura(contexto_ano, MONTH_MAP[m2], int(d2))
+            if dt1 and dt2:
+                dt1 = ajustar_ano_referencia(dt1, dt_b)
+                dt2 = ajustar_ano_referencia(dt2, dt_b)
+                start = dt1.replace(hour=int(h1[:2]), minute=int(h1[2:]))
+                end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
+                if end < start: end = end.replace(year=end.year + 1)
+                
+                # Clipping Fase 0
+                if not (end <= dt_b or start >= dt_c):
+                    slots.append({'inicio': max(start, dt_b), 'fim': min(end, dt_c)})
+    text = re_hibrido.sub(' ', text)
 
     # --- FASE 1: SCANNER MESTRE ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
@@ -102,7 +123,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             else: offset_dias = (7 - idx_ini) + idx_fim
         else:
             h_ini_str, h_fim_str = s_hora_ini, s_hora_fim
-            # Apenas sinalizamos offset se h_fim < h_ini
             if int(h_fim_str) < int(h_ini_str): offset_dias = 1
 
         segmento = text[last_end:match.start()]
@@ -160,21 +180,18 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                                 datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_end))
                                 contexto_mes = mes_dest; i += 4; continue
                     if "/" in tok: 
-                        for p in tok.split("/"):
-                            dt = criar_data_segura(contexto_ano, contexto_mes, int(p))
-                            if dt: datas_deste_segmento.append(dt)
+                        partes = tok.split("/")
+                        dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
+                        if dt: datas_deste_segmento.append(dt)
+                        if offset_dias == 0 and not is_complex: 
+                             dt2 = criar_data_segura(contexto_ano, contexto_mes, int(partes[1]))
+                             if dt2: datas_deste_segmento.append(dt2)
                         i += 1; continue
                     else:
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(tok))
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
-            
-            if not datas_deste_segmento and filtro_semana_deste_segmento:
-                curr = dt_b
-                while curr <= dt_c:
-                    datas_deste_segmento.append(curr); curr += timedelta(days=1)
-
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
@@ -191,27 +208,20 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
+
             if is_complex and filtro_dia_inicio is not None:
                 if dt_final.weekday() != filtro_dia_inicio: continue
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
-            # --- LÓGICA DE GERAÇÃO DE SLOTS (BURLA DE 1 MINUTO) ---
-            s_ini_teorico = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
-            s_ini = max(s_ini_teorico, dt_b)
+            s_ini = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
+            s_fim = s_ini + timedelta(days=offset_dias)
+            s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
+            if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
-            
-            # Se for regra específica (não diária) e o início bate ou passa o fim
-            if s_ini >= s_fim and not ("DLY" in segmento or "DAILY" in segmento):
-                # BURLA: Cria janela simbólica de 1 minuto em vez de pernoite de 24h
-                s_fim = s_ini + timedelta(minutes=1)
-            else:
-                # Se for pernoite real ou rotina diária
-                if s_fim < s_ini: s_fim += timedelta(days=1)
-            
+            # Clipping Fase 1
             if s_fim <= dt_b or s_ini >= dt_c: continue
-            slots.append({'inicio': s_ini, 'fim': min(s_fim, dt_c)})
+            slots.append({'inicio': max(s_ini, dt_b), 'fim': min(s_fim, dt_c)})
 
     slots.sort(key=lambda x: x['inicio'])
     return slots
