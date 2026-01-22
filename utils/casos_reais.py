@@ -859,4 +859,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "15/03/2026 20:00"
         }
     },
+    {
+        "id": "CASO_72",
+        "desc": "Burla de 1min em B, intervalo TIL com troca de mês e gap entre dia 01 e 07",
+        "b": "2511292042",
+        "c": "2602242109",
+        "d": "NOV 29 2042-SS NOV 30 TIL DEC 01 07 TIL FEB 24 SR-SS",
+        "esperado": {
+            "qtd_slots": 83,
+            "primeiro_inicio": "29/11/2025 20:42",
+            "ultimo_fim": "24/02/2026 20:00"
+        }
+    },
 ]
