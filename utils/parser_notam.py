@@ -52,9 +52,6 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 def resolver_dia_semana_composto(token):
-    """
-    Resolve 'MON/TUE' para o índice de 'MON'.
-    """
     if "/" in token:
         partes = token.split("/")
         if partes[0] in WEEK_MAP:
@@ -65,7 +62,7 @@ def resolver_dia_semana_composto(token):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V11: Suporte a Barras (/) em Dias (MON/TUE) e Datas (01/02).
+    V12: Correção de Herança de Datas quando apenas Dias da Semana mudam.
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = parse_notam_date(item_c_raw)
@@ -92,7 +89,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         segmento = text[last_end:match.start()]
         last_end = match.end()
         
-        # Verifica se cruza a meia-noite (para lógica 01/02)
         cruza_noite = int(h_fim_str) < int(h_ini_str)
         
         datas_deste_segmento = []
@@ -107,11 +103,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             achou_nova_definicao = True
         
         else:
-            # TOKENIZER V11: Preserva barras em pares
-            # Ex: Captura "MON/TUE", "01/02", "JAN", "10"
             tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
-            
-            # Limpeza de tokens vazios ou barras soltas
             tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
 
             tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
@@ -120,15 +112,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             if tem_conteudo_data or tem_conteudo_semana:
                 achou_nova_definicao = True
                 
-                # --- 1. SCANNER SEMANA (Com suporte a /) ---
+                # 1. SCANNER SEMANA
                 k = 0
                 while k < len(tokens):
                     tok = tokens[k]
                     idx_tok = resolver_dia_semana_composto(tok)
                     
                     if idx_tok is not None:
-                        # Verifica Range: [DIA] [TIL] [DIA]
-                        # Precisamos olhar adiante e resolver o alvo também
                         if k + 2 < len(tokens) and tokens[k+1] == "TIL":
                             idx_alvo = resolver_dia_semana_composto(tokens[k+2])
                             if idx_alvo is not None:
@@ -139,60 +129,45 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                                     filtro_semana_deste_segmento.update(range(0, idx_alvo + 1))
                                 k += 3
                                 continue
-                        
-                        # Dia Único (ou Par Único MON/TUE -> MON)
                         filtro_semana_deste_segmento.add(idx_tok)
                         k += 1
                     else:
                         k += 1
                 
-                # --- 2. SCANNER DATAS (Com suporte a /) ---
+                # 2. SCANNER DATAS
                 i = 0
                 while i < len(tokens):
                     tok = tokens[i]
-                    
-                    # Se for Mês
                     if tok in MONTH_MAP:
                         contexto_mes = MONTH_MAP[tok]
                         i += 1
                         continue
-                    
-                    # Ignora se for semana ou TIL
                     if resolver_dia_semana_composto(tok) is not None or (tok == "TIL" and i>0 and resolver_dia_semana_composto(tokens[i-1]) is not None):
                         i += 1
                         continue
 
-                    # Se for Número (Simples ou Composto 01/02)
                     if tok[0].isdigit():
-                        # Lógica 01/02
                         if "/" in tok:
                             partes = tok.split("/")
-                            dia_start = int(partes[0])
-                            dia_extra = int(partes[1])
-                            
+                            dia_start, dia_extra = int(partes[0]), int(partes[1])
                             dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
                             if dt: datas_deste_segmento.append(dt)
-                            
-                            # Se NÃO cruza a noite, o dia_extra é um dia válido separado (evento de 2 dias)
-                            # Se cruza a noite (evento noturno), dia_extra é só o fim do evento, não um novo início.
                             if not cruza_noite:
                                 dt2 = criar_data_segura(contexto_ano, contexto_mes, dia_extra)
                                 if dt2: datas_deste_segmento.append(dt2)
-                            
                             i += 1
                             continue
 
-                        # Lógica Normal (Número solto)
                         dia_start = int(tok)
                         if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                             alvo = tokens[i+2]
-                            if alvo.isdigit(): # Range 03 TIL 11
+                            if alvo.isdigit():
                                 dia_end = int(alvo)
                                 lista = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end)
                                 datas_deste_segmento.extend(lista)
                                 i += 3
                                 continue
-                            elif alvo in MONTH_MAP: # Range 02 TIL APR 10
+                            elif alvo in MONTH_MAP:
                                 mes_dest = MONTH_MAP[alvo]
                                 if i + 3 < len(tokens) and tokens[i+3].isdigit():
                                     dia_dest = int(tokens[i+3])
@@ -202,14 +177,18 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                                     i += 4
                                     continue
                         
-                        # Single Day
                         dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
                         if dt: datas_deste_segmento.append(dt)
                         i += 1
                         continue
-                    
                     i += 1
-        
+                
+                # --- CORREÇÃO V12: Lógica de Herança Híbrida ---
+                # Se achamos dias da semana novos, mas NENHUMA data nova foi gerada,
+                # significa que o usuário quer aplicar os novos dias às datas antigas.
+                if not datas_deste_segmento and ultima_lista_datas:
+                    datas_deste_segmento = list(ultima_lista_datas)
+
         if achou_nova_definicao:
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
