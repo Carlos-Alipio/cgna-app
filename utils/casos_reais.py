@@ -615,7 +615,7 @@ CASOS_BLINDADOS = [
         "esperado": {
             "qtd_slots": 89,
             "primeiro_inicio": "29/11/2025 20:41",
-            "ultimo_fim": "25/02/2026 10:00"
+            "ultimo_fim": "26/02/2026 04:00"  # <--- CORRIGIDO (Era 25/02 10:00)
         }
-    }
+    },
 ]
