@@ -751,4 +751,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "25/02/2026 20:00"
         }
     },
+    {
+        "id": "CASO_63",
+        "desc": "Regime Híbrido: Transição de slot único para dois turnos diários (SR-SS) entre Jan e Abr",
+        "b": "2601131930",
+        "c": "2604122104",
+        "d": "JAN 13 1930-SS 14 TIL APR 12 SR-1100 1930-SS",
+        "esperado": {
+            "qtd_slots": 179,
+            "primeiro_inicio": "13/01/2026 19:30",
+            "ultimo_fim": "12/04/2026 20:00"
+        }
+    },
 ]
