@@ -19,12 +19,10 @@ days_pattern = '|'.join(WEEK_MAP.keys())
 
 # --- REGEX ---
 RE_HORARIO_SEGMENT = re.compile(r'(\d{4}-\d{4}|SR-SS|SR-\d{4}|\d{4}-SS)')
-
-# Regex para limpar dias compostos ex: MON/TUE -> MON
 RE_DIA_COMPOSTO = re.compile(r'\b([A-Z]{3})/([A-Z]{3})\b')
 
-# Regex para capturar datas compostas ex: DEC 01/02 (CRUCIAL!)
-RE_DATA_BARRA = re.compile(r'\b([A-Z]{3})\s+(\d{1,2})/(\d{1,2})\b')
+# Regex flexível para datas com barra (DEC 01/02)
+RE_DATA_BARRA = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s*/\s*(\d{1,2})(?:\s|$)')
 
 RE_WEEK_RANGE = re.compile(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern + r')\b')
 RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2})')
@@ -45,6 +43,28 @@ def calculate_sun_times(date_obj):
     sr = date_obj.replace(hour=9, minute=0, second=0)
     ss = date_obj.replace(hour=21, minute=0, second=0)
     return sr, ss
+
+def verifica_virada_noite(horario_str):
+    """
+    Verifica se o string de horário implica virada de dia (ex: 2133-0115).
+    Retorna True se Hora Fim < Hora Início.
+    """
+    try:
+        parts = horario_str.replace(" TO ", "-").split("-")
+        if len(parts) < 2: return False
+        h1, h2 = parts[0].strip(), parts[1].strip()
+        
+        # Casos SR/SS
+        if "SS" in h1 and "SR" in h2: return True # Pôr do sol ao nascer (vira noite)
+        if "SR" in h1 and "SS" in h2: return False # Dia claro
+        
+        # Numéricos
+        if h1.isdigit() and h2.isdigit() and len(h1)==4 and len(h2)==4:
+            return int(h2) < int(h1)
+            
+        return False
+    except:
+        return False
 
 def extrair_horarios(texto_horario, base_date):
     slots = []
@@ -105,11 +125,11 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        # --- ETAPA 0: PROCURA DATA COM BARRA (DEC 01/02) ANTES DE LIMPAR ---
-        # Isso garante que "01/02" seja lido como data antes da barra ser removida
+        # --- ETAPA 0: PROCURA DATA COM BARRA (DEC 01/02) ---
         ini_dt_seg = None
         fim_dt_seg = None
         achou_data = False
+        eh_evento_unico = False # Flag para travar o loop no primeiro dia
 
         m_barra = RE_DATA_BARRA.search(segmento)
         if m_barra:
@@ -121,7 +141,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     fim_dt_seg = datetime(y, mes_num, int(d2))
                     ini_dt_seg = ajustar_ano(ini_dt_seg, dt_b)
                     
-                    # Ajuste de virada de mês/ano (ex: DEC 31/01)
                     if fim_dt_seg.month < ini_dt_seg.month:
                         fim_dt_seg = fim_dt_seg.replace(year=ini_dt_seg.year + 1)
                     else:
@@ -129,14 +148,25 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                     
                     achou_data = True
                     contexto_validade = (ini_dt_seg, fim_dt_seg)
+
+                    # === CORREÇÃO LÓGICA DO USUÁRIO ===
+                    # Se for dias consecutivos (ex: 01 e 02) E o horário vira a noite (2133-0115)
+                    # Significa "Do dia 01 às 21h ATÉ o dia 02 às 01h".
+                    # NÃO significa repetir no dia 02.
+                    diff_dias = (fim_dt_seg - ini_dt_seg).days
+                    vira_noite = verifica_virada_noite(horario_str)
+                    
+                    if diff_dias == 1 and vira_noite:
+                        # Forçamos o fim para ser igual ao início para o gerador rodar só 1 vez
+                        # O cálculo de horário (+1 dia) fará chegar na data final correta
+                        fim_dt_seg = ini_dt_seg 
             except: pass
 
-        # --- ETAPA 1: LIMPEZA PARA DIAS DA SEMANA ---
-        # Agora sim limpamos as barras para tratar MON/TUE
+        # --- ETAPA 1: LIMPEZA ---
         segmento_limpo = RE_DIA_COMPOSTO.sub(r'\1', segmento)
         segmento_limpo = segmento_limpo.replace("/", " ") 
 
-        # --- ETAPA 2: IDENTIFICAÇÃO DE DIAS DA SEMANA ---
+        # --- ETAPA 2: DIAS DA SEMANA ---
         dias_filtro = set()
         for m_wr in RE_WEEK_RANGE.finditer(segmento_limpo):
             d1_str, d2_str = m_wr.groups()
@@ -146,18 +176,16 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
             else: dias_filtro.update(list(range(s_idx, 7)) + list(range(0, e_idx + 1)))
         
         segmento_sem_week = RE_WEEK_RANGE.sub(" ", segmento_limpo)
-        
         for dia_nome, dia_idx in WEEK_MAP.items():
             if re.search(r'\b' + dia_nome + r'\b', segmento_sem_week):
                 dias_filtro.add(dia_idx)
         
-        # --- ETAPA 3: OUTRAS FORMATOS DE DATA (SE AINDA NÃO ACHOU) ---
+        # --- ETAPA 3: OUTRAS DATAS ---
         if not achou_data:
             segmento_datas = segmento_sem_week
             for dia in WEEK_MAP.keys(): 
                 segmento_datas = re.sub(r'\b' + dia + r'\b', " ", segmento_datas)
             
-            # Procura Range Completo (DEC 02 TIL FEB 28)
             m_full = RE_FULL_RANGE.search(segmento_datas)
             if m_full:
                 m1, d1, m2, d2 = m_full.groups()
@@ -168,17 +196,15 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         ini_dt_seg = datetime(y, mes1_num, int(d1))
                         fim_dt_seg = datetime(y, mes2_num, int(d2))
                         ini_dt_seg = ajustar_ano(ini_dt_seg, dt_b)
-                        
                         if fim_dt_seg.month < ini_dt_seg.month: 
                             fim_dt_seg = fim_dt_seg.replace(year=ini_dt_seg.year + 1)
                         else: 
                             fim_dt_seg = fim_dt_seg.replace(year=ini_dt_seg.year)
-                        
                         achou_data = True
                         contexto_validade = (ini_dt_seg, fim_dt_seg)
                 except: pass
         
-        # --- ETAPA 4: MEMÓRIA E GERAÇÃO ---
+        # --- ETAPA 4: GERAÇÃO ---
         if not achou_data and contexto_validade:
             ini_dt_seg, fim_dt_seg = contexto_validade
         
@@ -188,8 +214,9 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
             if dias_filtro:
                 resultado.extend(gerar_dias_entre(dt_b, dt_c, dias_filtro, horario_str))
 
-    # Limpeza e Ordenação
+    # Sem tolerância (lógica exata)
     resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=2)]
+    
     unique_res = []
     seen = set()
     for r in resultado_final:
@@ -201,15 +228,13 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
     return sorted(unique_res, key=lambda x: x['inicio'])
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
-    # Processamento de Datas
     dt_b = parse_notam_date(item_b_raw)
     if not dt_b: return []
 
     val_c = str(item_c_raw).upper()
-    is_perm_raw = "PERM" in val_c
     dt_c = parse_notam_date(item_c_raw)
     
-    if is_perm_raw or not dt_c:
+    if "PERM" in val_c or not dt_c:
         dt_c = dt_b + timedelta(days=365)
 
     if not item_d_text or not str(item_d_text).strip():
@@ -218,10 +243,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     if (dt_c - dt_b).days > MAX_DAYS_PROJECT:
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
-    # Limpeza do Texto
     text = item_d_text.upper().strip()
     text = text.replace('\n', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
-    # IMPORTANTE: Não removemos mais RE_BARRA_DATA globalmente aqui
     text = text.replace(u'\xa0', u' ')
 
     res = []
