@@ -413,4 +413,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "25/01/2026 21:59"
         }
     },
+    {
+        "id": "CASO_35",
+        "desc": "Midnight Start: Início às 00:00 e herança de datas",
+        "b": "2511210000",
+        "c": "2601252310",
+        "d": "NOV 21 0000-0110 27 DEC 05 13 21 2200-2310 31 2100-2210 JAN 08 16 25 2200-2310",
+        "esperado": {
+            "qtd_slots": 9,
+            "primeiro_inicio": "21/11/2025 00:00",
+            "ultimo_fim": "25/01/2026 23:10"
+        }
+    },
 ]
