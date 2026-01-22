@@ -121,5 +121,17 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "17/01/2026 03:40",
             "ultimo_fim": "15/02/2026 08:20"
         }
-    }
+    },
+    {
+        "id": "CASO_11",
+        "desc": "Listas de Datas Distintas com Horários Diferentes",
+        "b": "2601051000",
+        "c": "2601301550",
+        "d": "JAN 05 08 10 12 15 17 19 22 24 26 29 1000-1620 JAN 06 07 09 13 14 16 20 21 23 27 28 30 1000-1550",
+        "esperado": {
+            "qtd_slots": 23,
+            "primeiro_inicio": "05/01/2026 10:00",
+            "ultimo_fim": "30/01/2026 15:50"
+        }
+    },
 ]
