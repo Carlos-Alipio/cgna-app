@@ -787,9 +787,9 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "02/03/2026 20:00"
         }
     },
-    {
+{
         "id": "CASO_66",
-        "desc": "Rotina Solar: DLY SR-SS (0800-2000) com clipping no início pelo Limite B (08:33)",
+        "desc": "Rotina Solar: DLY SR-SS (0800-2000) de Dezembro a Março",
         "b": "2512100833",
         "c": "2603082130",
         "d": "DEC 10 TIL MAR 08 SR-SS",
