@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.3: Implementação de CLIPPING (max/min) para garantir respeito aos limites B e C.
+    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -75,7 +75,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     
     contexto_ano = dt_b.year
 
-    # --- FASE 0: PEELING (Com Clipping) ---
+    # --- FASE 0: PEELING ---
     re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
     for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
@@ -90,12 +90,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
                 if end < start: end = end.replace(year=end.year + 1)
                 
-                # Aplicação de Clipping
+                # Clipping Fase 0
                 if not (end <= dt_b or start >= dt_c):
                     slots.append({'inicio': max(start, dt_b), 'fim': min(end, dt_c)})
     text = re_hibrido.sub(' ', text)
 
-    # --- FASE 1: SCANNER MESTRE (Com Clipping) ---
+    # --- FASE 1: SCANNER MESTRE ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
     regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
@@ -106,8 +106,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
-    if not matches and not slots: 
-        return [{'inicio': dt_b, 'fim': dt_c}]
+    if not matches and not slots: return [{'inicio': dt_b, 'fim': dt_c}]
 
     for match in matches:
         c_dia_ini, c_hora_ini, c_dia_fim, c_hora_fim, s_hora_ini, s_hora_fim = match.groups()
@@ -220,7 +219,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            # Aplicação de Clipping nos Limites B e C
+            # Clipping Fase 1
             if s_fim <= dt_b or s_ini >= dt_c: continue
             slots.append({'inicio': max(s_ini, dt_b), 'fim': min(s_fim, dt_c)})
 
