@@ -486,4 +486,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "18/03/2026 21:00"
         }
     },
+    {
+        "id": "CASO_41",
+        "desc": "Múltiplos Ranges (DEC-JAN, FEB) com Múltiplos Horários Compartilhados",
+        "b": "2512241100",
+        "c": "2602231900",
+        "d": "DEC 24 TIL JAN 31 FEB 11 TIL 23 1100-1300 1700-1900",
+        "esperado": {
+            "qtd_slots": 104,
+            "primeiro_inicio": "24/12/2025 11:00",
+            "ultimo_fim": "23/02/2026 19:00"
+        }
+    },
 ]
