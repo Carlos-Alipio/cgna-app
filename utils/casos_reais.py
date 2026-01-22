@@ -377,4 +377,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/03/2026 20:59"
         }
     },
+    {
+        "id": "CASO_32",
+        "desc": "Fronteiras Exatas: 1º Slot começa em B e Último Slot termina em C",
+        "b": "2602022200",
+        "c": "2603282200",
+        "d": "FEB 02 11 20 MAR 01 09 18 2200-2300 MAR 28 2100-2200",
+        "esperado": {
+            "qtd_slots": 7,
+            "primeiro_inicio": "02/02/2026 22:00",
+            "ultimo_fim": "28/03/2026 22:00"
+        }
+    },
 ]
