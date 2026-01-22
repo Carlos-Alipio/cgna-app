@@ -18,8 +18,8 @@ WEEK_MAP = {
 days_pattern = '|'.join(WEEK_MAP.keys())
 
 # --- REGEX ---
-# Atualizado para ser mais tolerante com espaços no horário (ex: 1100 - 1900)
-RE_HORARIO_SEGMENT = re.compile(r'(\d{4}\s?-\s?\d{4}|SR\s?-\s?SS|SR\s?-\s?\d{4}|\d{4}\s?-\s?SS)')
+# Regex Robusto para Horários (captura 1000-1200, 1000 - 1200, SR-SS, etc.)
+RE_HORARIO_SEGMENT = re.compile(r'\b(SR|SS|\d{4})\s?-\s?(SR|SS|\d{4})\b')
 
 RE_DIA_COMPOSTO = re.compile(r'\b([A-Z]{3})/([A-Z]{3})\b')
 RE_DATA_BARRA = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s*/\s*(\d{1,2})(?:\s|$)')
@@ -28,7 +28,6 @@ RE_WEEK_RANGE = re.compile(r'\b(' + days_pattern + r')\s+TIL\s+(' + days_pattern
 RE_FULL_RANGE = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+TIL\s+([A-Z]{3})\s+(\d{1,2})')
 RE_NUM_RANGE = re.compile(r'(\d{1,2})\s+TIL\s+(\d{1,2})')
 RE_MONTH = re.compile(r'\b(' + '|'.join(MONTH_MAP.keys()) + r')\b')
-# Regex para capturar dias soltos (numéricos)
 RE_NUM = re.compile(r'\b(\d{1,2})\b')
 
 def parse_notam_date(date_str):
@@ -58,33 +57,38 @@ def verifica_virada_noite(horario_str):
     except:
         return False
 
+# --- NOVA FUNÇÃO DE EXTRAÇÃO (SEM O REPLACE DESTRUÍDOR) ---
 def extrair_horarios(texto_horario, base_date):
     slots = []
-    texto_clean = texto_horario.upper().replace("/", "-").replace(" TO ", "-").replace(" ", "").strip() # Remove espaços internos ex 1100 - 1900
+    # Usa Regex para encontrar todos os pares de horário na string
+    matches = RE_HORARIO_SEGMENT.findall(texto_horario.upper())
     
-    # Tratamento simplificado pois o regex já garante a estrutura
-    if "-" in texto_clean:
+    sr_dt, ss_dt = calculate_sun_times(base_date)
+
+    for inicio_str, fim_str in matches:
         try:
-            parts = texto_clean.split("-")
-            inicio_str, fim_str = parts[0], parts[1]
-            
-            sr_dt, ss_dt = calculate_sun_times(base_date)
             dt_ini, dt_fim = None, None
 
+            # Processa Início
             if "SR" in inicio_str: dt_ini = sr_dt
             elif "SS" in inicio_str: dt_ini = ss_dt
             elif len(inicio_str) == 4 and inicio_str.isdigit():
                 dt_ini = base_date.replace(hour=int(inicio_str[:2]), minute=int(inicio_str[2:]))
 
+            # Processa Fim
             if "SR" in fim_str: dt_fim = sr_dt
             elif "SS" in fim_str: dt_fim = ss_dt
             elif len(fim_str) == 4 and fim_str.isdigit():
                 dt_fim = base_date.replace(hour=int(fim_str[:2]), minute=int(fim_str[2:]))
-                if dt_fim < dt_ini: dt_fim += timedelta(days=1)
+                
+                # Verifica virada de dia (ex: 2200-0200)
+                if dt_fim < dt_ini: 
+                    dt_fim += timedelta(days=1)
 
             if dt_ini and dt_fim:
                 slots.append({'inicio': dt_ini, 'fim': dt_fim})
-        except: pass
+        except: continue
+        
     return slots
 
 def ajustar_ano(dt_alvo, dt_inicio_vigencia):
@@ -111,11 +115,11 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
 
     last_end = 0
     y = dt_b.year
-    contexto_mes = dt_b.strftime("%b").upper() # Inicializa com mês do NOTAM
+    contexto_mes = dt_b.strftime("%b").upper()
     contexto_validade = None 
 
     for match in matches:
-        horario_str = match.group(0) # Pega o match completo do horário
+        horario_str = match.group(0)
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
@@ -169,7 +173,6 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
         
         # --- ETAPA 3: RANGES COMPLETOS ---
         segmento_datas = segmento_sem_week
-        # Remove dias da semana do texto para não confundir
         for dia in WEEK_MAP.keys(): 
             segmento_datas = re.sub(r'\b' + dia + r'\b', " ", segmento_datas)
 
@@ -193,52 +196,41 @@ def processar_por_segmentacao_de_horario(text, dt_b, dt_c, icao):
                         contexto_mes = m2
                 except: pass
 
-        # --- ETAPA 4 (NOVA): LISTA DE DIAS SOLTOS (JAN 20 23 27 30) ---
+        # --- ETAPA 4: DIAS SOLTOS ---
         if not achou_data:
-            # 1. Tenta atualizar o mês do contexto se ele aparecer no texto
             m_mes = RE_MONTH.search(segmento_datas)
-            if m_mes:
-                contexto_mes = m_mes.group(1)
+            if m_mes: contexto_mes = m_mes.group(1)
             
-            # 2. Busca todos os números soltos
             numeros_encontrados = list(RE_NUM.finditer(segmento_datas))
-            
             if numeros_encontrados:
                 mes_num = MONTH_MAP.get(contexto_mes)
                 if mes_num:
                     datas_pontuais = []
                     for m_num in numeros_encontrados:
                         dia_num = int(m_num.group(1))
-                        # Validação básica de dia
                         if 1 <= dia_num <= 31: 
                             try:
                                 dt_pontual = datetime(y, mes_num, dia_num)
                                 dt_pontual = ajustar_ano(dt_pontual, dt_b)
                                 datas_pontuais.append(dt_pontual)
                             except: pass
-                    
                     if datas_pontuais:
-                        achou_data = True # Marcamos que achamos dados para não usar memória
-                        # Gera slots para cada dia individualmente
+                        achou_data = True
                         for dt in datas_pontuais:
                             resultado.extend(extrair_horarios(horario_str, dt))
 
-        # --- ETAPA 5: GERAÇÃO (Se for Range ou Memória) ---
-        # Só executa se NÃO tivermos gerado dados na Etapa 4 (Dias Soltos)
-        # Se achou_data for True devido à Etapa 4, o loop acima já gerou.
-        # Se achou_data for True devido a Range/Barra, contexto_validade estará preenchido.
+        # --- ETAPA 5: GERAÇÃO ---
         if contexto_validade:
-            # Se a Etapa 4 rodou, ela não preenche contexto_validade, então aqui é seguro
             ini_dt_seg, fim_dt_seg = contexto_validade
-            # Se achou data (range) ou está usando memória, gera.
-            # Mas se foi apenas dias da semana sem data nova, usa a memória.
             resultado.extend(gerar_dias_entre(ini_dt_seg, fim_dt_seg, dias_filtro, horario_str))
         
-        # --- ETAPA 6: FALLBACK (Sem data, sem memória, mas com dias da semana) ---
-        elif not achou_data and dias_filtro and not contexto_validade:
-             # Caso raro: "MON TUE 1000-1200" sem data nenhuma antes
-             resultado.extend(gerar_dias_entre(dt_b, dt_c, dias_filtro, horario_str))
+        # --- ETAPA 6: FALLBACK (Sem data específica, aplica ao período total) ---
+        elif not achou_data and not contexto_validade:
+             # Se tem DLY ou dias da semana, ou se é só horário solto, assume período total
+             if "DLY" in segmento or "DAILY" in segmento or dias_filtro:
+                resultado.extend(gerar_dias_entre(dt_b, dt_c, dias_filtro, horario_str))
 
+    # Filtragem Final
     resultado_final = [r for r in resultado if dt_b <= r['inicio'] <= dt_c + timedelta(days=2)]
     
     unique_res = []
@@ -268,6 +260,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         dt_c = dt_b + timedelta(days=MAX_DAYS_PROJECT)
 
     text = item_d_text.upper().strip()
+    # Limpeza básica (sem remover espaços internos dos horários)
     text = text.replace('\n', ' ').replace('\t', ' ').replace(',', ' ').replace('.', ' ').replace('  ', ' ')
     text = text.replace(u'\xa0', u' ')
 
