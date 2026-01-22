@@ -230,4 +230,28 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "12/12/2026 21:17"
         }
     },
+    {
+        "id": "CASO_20",
+        "desc": "Misto: Data Única + Range DLY com múltiplos horários (Precedência)",
+        "b": "2601051800",
+        "c": "2603152130",
+        "d": "JAN 05 1800-2130 JAN 06 TIL MAR 15 DLY 0800-1230 1800-2130",
+        "esperado": {
+            "qtd_slots": 139,
+            "primeiro_inicio": "05/01/2026 18:00",
+            "ultimo_fim": "15/03/2026 21:30"
+        }
+    },
+    {
+        "id": "CASO_21",
+        "desc": "Mix de Lista de Dias e Dias Únicos (Teste de Estabilidade)",
+        "b": "2601201100",
+        "c": "2601301900",
+        "d": "JAN 20 23 27 30 1100-1900 JAN 22 1600-2200 JAN 24 1100-1600 JAN 29 1600-2100",
+        "esperado": {
+            "qtd_slots": 7,
+            "primeiro_inicio": "20/01/2026 11:00",
+            "ultimo_fim": "30/01/2026 19:00"
+        }
+    },
 ]
