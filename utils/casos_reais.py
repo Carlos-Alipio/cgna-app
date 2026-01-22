@@ -206,4 +206,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "08/02/2026 11:55"
         }
     },
+    {
+        "id": "CASO_18",
+        "desc": "Item D Vazio (Longa Duração / Virada de Ano)",
+        "b": "2512301809",
+        "c": "2603300900",
+        "d": "",
+        "esperado": {
+            "qtd_slots": 1,
+            "primeiro_inicio": "30/12/2025 18:09",
+            "ultimo_fim": "30/03/2026 09:00"
+        }
+    },
 ]
