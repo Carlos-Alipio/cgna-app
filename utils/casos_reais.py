@@ -170,4 +170,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "06/02/2026 20:00"
         }
     },
+    {
+        "id": "CASO_15",
+        "desc": "DLY Limites Exatos II (Reconfirmação)",
+        "b": "2602091200",
+        "c": "2602122000",
+        "d": "DLY 1200-2000",
+        "esperado": {
+            "qtd_slots": 4,
+            "primeiro_inicio": "09/02/2026 12:00",
+            "ultimo_fim": "12/02/2026 20:00"
+        }
+    },
 ]
