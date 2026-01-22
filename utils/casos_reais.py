@@ -739,4 +739,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "30/01/2026 15:50"
         }
     },
+    {
+        "id": "CASO_62",
+        "desc": "Horário Solar: Uso de DLY SR-SS (Sunrise/Sunset) com placeholders fixos",
+        "b": "2511280939",
+        "c": "2602252218",
+        "d": "DLY SR-SS",
+        "esperado": {
+            "qtd_slots": 90,
+            "primeiro_inicio": "28/11/2025 06:00",
+            "ultimo_fim": "25/02/2026 18:00"
+        }
+    },
 ]
