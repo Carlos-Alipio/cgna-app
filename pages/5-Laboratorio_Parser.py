@@ -1,82 +1,124 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import parser_notam
+from utils import parser_notam, casos_reais # Importa nosso cofre
 
-st.set_page_config(page_title="Lab Parser Incremental", layout="wide")
+st.set_page_config(page_title="Lab Parser Blindado", layout="wide")
 
-st.title("🛠️ Laboratório de Parser (Desenvolvimento Incremental)")
-st.markdown("""
-Use esta ferramenta para validar o **Caso Atual**. 
-Se o resultado estiver correto, passaremos para o próximo caso e adicionaremos este à lista de regressão.
-""")
+st.title("🛡️ Laboratório com Regressão Automática")
 
-# --- ÁREA DE INPUT ---
-st.subheader("1. Entrada de Dados (Caso Atual)")
+# ==============================================================================
+# 1. MOTOR DE REGRESSÃO (RODA AUTOMATICAMENTE)
+# ==============================================================================
+st.sidebar.header("🚦 Status da Regressão")
 
-c1, c2, c3 = st.columns(3)
+falhas = []
+sucessos = 0
 
-with c1:
-    # Inputs amigáveis para data/hora
-    dt_inicio = st.date_input("Data Início (B)", value=datetime(2026, 1, 26))
-    hr_inicio = st.time_input("Hora Início (B)", value=datetime.strptime("03:20", "%H:%M").time())
-    
-with c2:
-    dt_fim = st.date_input("Data Fim (C)", value=datetime(2026, 2, 13))
-    hr_fim = st.time_input("Hora Fim (C)", value=datetime.strptime("07:50", "%H:%M").time())
-
-with c3:
-    # Formata para o padrão RAW que o parser espera (YYMMDDHHMM)
-    # Isso simula exatamente como os dados vêm do banco/api
-    raw_b = datetime.combine(dt_inicio, hr_inicio).strftime("%y%m%d%H%M")
-    raw_c = datetime.combine(dt_fim, hr_fim).strftime("%y%m%d%H%M")
-    
-    st.info(f"**String B simulada:** `{raw_b}`")
-    st.info(f"**String C simulada:** `{raw_c}`")
-
-# Texto D
-st.markdown("---")
-texto_d = st.text_area("Texto do Item D:", value="DLY 0320-0750", height=100)
-
-# --- BOTÃO DE AÇÃO ---
-if st.button("🔬 Processar NOTAM", type="primary"):
-    
-    # Chama o parser V1
+for caso in casos_reais.CASOS_BLINDADOS:
     try:
+        # Roda o parser atual com os dados antigos
         slots = parser_notam.interpretar_periodo_atividade(
-            item_d_text=texto_d,
-            icao="TESTE",
-            item_b_raw=raw_b,
-            item_c_raw=raw_c
+            caso['d'], "TESTE", caso['b'], caso['c']
         )
         
-        # --- EXIBIÇÃO DOS RESULTADOS ---
-        if not slots:
-            st.warning("⚠️ O parser não retornou nenhum slot (Lista Vazia).")
+        # Cria o Snapshot do resultado atual
+        qtd_atual = len(slots)
+        if qtd_atual > 0:
+            # Ordena para garantir comparação correta
+            slots = sorted(slots, key=lambda x: x['inicio'])
+            primeiro_ini = slots[0]['inicio'].strftime("%d/%m/%Y %H:%M")
+            ultimo_fim = slots[-1]['fim'].strftime("%d/%m/%Y %H:%M")
         else:
-            df = pd.DataFrame(slots)
+            primeiro_ini = "N/A"
+            ultimo_fim = "N/A"
             
-            # Formatação para facilitar a leitura humana
-            df['Dia Semana'] = df['inicio'].dt.strftime('%a').str.upper()
-            df['Data Início'] = df['inicio'].dt.strftime('%d/%m/%Y')
-            df['Hora Início'] = df['inicio'].dt.strftime('%H:%M')
-            df['Data Fim'] = df['fim'].dt.strftime('%d/%m/%Y')
-            df['Hora Fim'] = df['fim'].dt.strftime('%H:%M')
+        # COMPARAÇÃO (O momento da verdade)
+        esp = caso['esperado']
+        erros_caso = []
+        
+        if qtd_atual != esp['qtd_slots']:
+            erros_caso.append(f"Qtd Slots: Esperado {esp['qtd_slots']} vs Gerado {qtd_atual}")
             
-            # Cálculo de Duração
-            df['Duração'] = df['fim'] - df['inicio']
+        if primeiro_ini != esp['primeiro_inicio']:
+            erros_caso.append(f"1º Slot: Esperado {esp['primeiro_inicio']} vs Gerado {primeiro_ini}")
             
-            # Métricas
-            col_m1, col_m2 = st.columns(2)
-            col_m1.metric("Total de Slots Gerados", len(df))
-            col_m2.metric("Duração do 1º Slot", str(df['Duração'].iloc[0]))
-
-            st.markdown("### 📊 Detalhamento dos Slots")
-            st.dataframe(
-                df[['Dia Semana', 'Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Duração']],
-                use_container_width=True,
-                height=400
-            )
+        if ultimo_fim != esp['ultimo_fim']:
+            erros_caso.append(f"Último Slot: Esperado {esp['ultimo_fim']} vs Gerado {ultimo_fim}")
+            
+        if erros_caso:
+            falhas.append(f"❌ **{caso['id']}**: " + " | ".join(erros_caso))
+        else:
+            sucessos += 1
             
     except Exception as e:
-        st.error(f"💥 Erro Fatal no Parser: {str(e)}")
+        falhas.append(f"🔥 **{caso['id']}**: Erro de execução - {str(e)}")
+
+# EXIBE O SEMÁFORO
+if len(falhas) > 0:
+    st.error(f"🚨 PARE! O código atual QUEBROU {len(falhas)} caso(s) antigo(s)!")
+    for f in falhas:
+        st.markdown(f)
+    st.sidebar.error("REGRESSÃO FALHOU")
+else:
+    st.success(f"✅ Sistema Estável: Todos os {sucessos} casos blindados estão funcionando.")
+    st.sidebar.success("SISTEMA ÍNTEGRO")
+
+st.divider()
+
+# ==============================================================================
+# 2. ÁREA DE TESTE DO NOVO CASO
+# ==============================================================================
+st.subheader("🔬 Testar Novo Caso")
+
+c1, c2, c3 = st.columns(3)
+with c1:
+    dt_inicio = st.date_input("Data Início (B)", value=datetime.now())
+    hr_inicio = st.time_input("Hora Início (B)", value=datetime.strptime("00:00", "%H:%M").time())
+with c2:
+    dt_fim = st.date_input("Data Fim (C)", value=datetime.now())
+    hr_fim = st.time_input("Hora Fim (C)", value=datetime.strptime("23:59", "%H:%M").time())
+with c3:
+    raw_b = datetime.combine(dt_inicio, hr_inicio).strftime("%y%m%d%H%M")
+    raw_c = datetime.combine(dt_fim, hr_fim).strftime("%y%m%d%H%M")
+    st.caption(f"Raw B: {raw_b} | Raw C: {raw_c}")
+
+texto_d = st.text_area("Texto Item D (Novo):", height=80)
+
+if st.button("Processar Novo Caso", type="primary"):
+    try:
+        slots = parser_notam.interpretar_periodo_atividade(texto_d, "TESTE", raw_b, raw_c)
+        
+        if not slots:
+            st.warning("Nenhum slot gerado.")
+        else:
+            df = pd.DataFrame(slots)
+            df['Dia'] = df['inicio'].dt.strftime('%d/%m/%Y (%a)')
+            df['Início'] = df['inicio'].dt.strftime('%H:%M')
+            df['Fim'] = df['fim'].dt.strftime('%H:%M')
+            
+            # Ordena
+            df = df.sort_values('inicio')
+            
+            # Resumo para "Blindagem"
+            st.info("👇 Se este resultado estiver correto, adicione estes dados ao `casos_reais.py`:")
+            code_snippet = f"""
+    {{
+        "id": "CASO_NOVO",
+        "desc": "...",
+        "b": "{raw_b}",
+        "c": "{raw_c}",
+        "d": "{texto_d}",
+        "esperado": {{
+            "qtd_slots": {len(slots)},
+            "primeiro_inicio": "{df.iloc[0]['inicio'].strftime('%d/%m/%Y %H:%M')}",
+            "ultimo_fim": "{df.iloc[-1]['fim'].strftime('%d/%m/%Y %H:%M')}"
+        }}
+    }},
+            """
+            st.code(code_snippet, language="python")
+            
+            st.dataframe(df[['Dia', 'Início', 'Fim']], use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"Erro: {e}")
