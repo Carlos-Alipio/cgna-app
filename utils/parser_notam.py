@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timedelta
 
-# Mapa de meses para converter texto em número
+# Mapa de meses
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
@@ -20,102 +20,140 @@ def parse_notam_date(date_str):
     except: return None
 
 def ajustar_ano_data(dia, mes, dt_referencia):
-    """
-    Cria uma data usando o ano da referência.
-    Se o mês da data for menor que o mês da referência (virada de ano), soma 1 ano.
-    """
     ano = dt_referencia.year
     try:
         dt_criada = datetime(ano, mes, dia)
-        # Se a data criada ficou muito no passado (ex: Jan 2026 quando estamos em Dez 2025), ajusta
-        # Lógica simples: se o mês alvo é menor que o mês ref e estamos no fim do ano...
-        # Mas para NOTAMs, geralmente a data B é o melhor guia.
+        # Ajuste de virada de ano (ex: Dezembro -> Janeiro)
         if dt_criada.month < dt_referencia.month and dt_referencia.month > 10:
              dt_criada = dt_criada.replace(year=ano + 1)
         return dt_criada
-    except:
-        return None
+    except: return None
+
+def tokenize_segment(text):
+    """
+    Quebra o texto em tokens limpos, preservando / e separando TIL.
+    Ex: "FEB 03 TIL 11" -> ["FEB", "03", "TIL", "11"]
+    Ex: "DEC 01/02" -> ["DEC", "01/02"]
+    """
+    # Adiciona espaços ao redor de palavras-chave para garantir separação
+    clean = text.replace(" TIL ", " TIL ").replace(" TO ", " TIL ")
+    # Normaliza espaços
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean.split(' ')
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V2: Suporte a DLY (Caso 1) e Listas de Dias Soltos (Caso 2).
-    Estratégia: Segmentação por Horário.
+    V4: Tokenizer Lookahead. Robustez total para Ranges e Listas.
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = parse_notam_date(item_c_raw)
-    
     if not dt_b or not dt_c: return []
 
     slots = []
     text = item_d_text.upper().strip()
     
-    # Regex para capturar horários (HHMM-HHMM)
-    # Usamos finditer para pegar todos os horários e suas posições
+    # Identifica horários (HHMM-HHMM)
     re_horario = re.compile(r'(\d{4})-(\d{4})')
     matches = list(re_horario.finditer(text))
     
     last_end = 0
-    contexto_mes = dt_b.month # Começa assumindo o mês da data de início
+    contexto_mes = dt_b.month # Mês inicial (default)
 
-    # Se não achou nenhum horário explícito no texto, mas tem datas B/C válidas,
-    # Pode ser um caso de DLY implícito ou texto mal formatado. 
-    # Por enquanto, retornamos vazio ou B-C se não houver matches, 
-    # mas o foco aqui são os casos com horário.
     if not matches:
-        # Fallback de segurança (comporta-se como DLY para o período todo se não tiver horário no texto)
         return [{'inicio': dt_b, 'fim': dt_c}]
 
     for match in matches:
         h_ini_str, h_fim_str = match.groups()
         
-        # Pega o texto ANTES deste horário (desde o último horário processado)
-        # Ex: "JAN 20 23 27 30 " antes de "1100-1900"
+        # Segmento de texto ANTES do horário atual
         segmento = text[last_end:match.start()].strip()
         last_end = match.end()
         
-        # --- LÓGICA DE DECISÃO ---
-        
-        # 1. Checa se é DLY (Regra do Caso 1)
-        if "DLY" in segmento:
-            # Gera slots para todos os dias entre B e C
+        # --- CASO 1: DLY ---
+        if "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c:
                 s_ini = curr.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
                 s_fim = curr.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
                 if s_fim < s_ini: s_fim += timedelta(days=1)
                 
-                # Otimização: Só adiciona se estiver dentro da validade global (com margem)
                 if s_fim >= dt_b and s_ini <= dt_c:
                     slots.append({'inicio': s_ini, 'fim': s_fim})
                 curr += timedelta(days=1)
-                
-        # 2. Checa se tem DIAS ESPECÍFICOS (Regra do Caso 2)
-        # Procura por meses (JAN, FEB...) e números (20, 23...)
+        
+        # --- CASO 2: PROCESSAMENTO POR TOKENS ---
         else:
-            # Tenta atualizar o contexto de mês
-            for nome_mes, num_mes in MONTH_MAP.items():
-                if nome_mes in segmento:
-                    contexto_mes = num_mes
-                    break
+            tokens = tokenize_segment(segmento)
+            i = 0
+            datas_base = []
             
-            # Encontra todos os números soltos no segmento (dias)
-            # Regex \b\d{1,2}\b pega números de 1 ou 2 dígitos isolados
-            dias_encontrados = re.findall(r'\b(\d{1,2})\b', segmento)
-            
-            if dias_encontrados:
-                for dia_str in dias_encontrados:
+            while i < len(tokens):
+                tok = tokens[i]
+                
+                # A) É um Mês? (Atualiza contexto)
+                if tok in MONTH_MAP:
+                    contexto_mes = MONTH_MAP[tok]
+                    i += 1
+                    continue
+                
+                # B) É uma Data Composta? (01/02)
+                if "/" in tok and re.match(r'\d+/\d+', tok):
                     try:
-                        dia = int(dia_str)
-                        # Cria a data baseada no ano de dt_b e mês do contexto
-                        dt_base = ajustar_ano_data(dia, contexto_mes, dt_b)
+                        p1, p2 = tok.split("/")
+                        dia1 = int(p1)
+                        dia2 = int(p2)
                         
-                        if dt_base:
-                            s_ini = dt_base.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
-                            s_fim = dt_base.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
-                            if s_fim < s_ini: s_fim += timedelta(days=1)
+                        # Verifica se é o caso de Evento Único (DEC 01/02 2133-0115)
+                        # Regra: Se cruza meia-noite (h_fim < h_ini), gera só o dia 1.
+                        cruza_noite = int(h_fim_str) < int(h_ini_str)
+                        
+                        dt1 = ajustar_ano_data(dia1, contexto_mes, dt_b)
+                        if dt1: datas_base.append(dt1)
+                        
+                        if not cruza_noite:
+                             dt2 = ajustar_ano_data(dia2, contexto_mes, dt_b)
+                             if dt2: datas_base.append(dt2)
+                    except: pass
+                    i += 1
+                    continue
+
+                # C) É um Número? (Pode ser Single ou Início de Range)
+                if tok.isdigit():
+                    dia_start = int(tok)
+                    
+                    # Lookahead: O próximo token é TIL?
+                    if (i + 2 < len(tokens)) and (tokens[i+1] == "TIL") and (tokens[i+2].isdigit()):
+                        # É UM RANGE (Start TIL End)
+                        dia_end = int(tokens[i+2])
+                        
+                        # Gera lista de dias
+                        if dia_end >= dia_start:
+                            rng = range(dia_start, dia_end + 1)
+                        else:
+                            rng = [dia_start, dia_end] # Fallback
                             
-                            slots.append({'inicio': s_ini, 'fim': s_fim})
-                    except:
-                        pass # Ignora números inválidos (ex: dia 32)
+                        for d in rng:
+                            dt = ajustar_ano_data(d, contexto_mes, dt_b)
+                            if dt: datas_base.append(dt)
+                        
+                        i += 3 # Pula [NUM, TIL, NUM]
+                        continue
+                    else:
+                        # É UM SINGLE
+                        dt = ajustar_ano_data(dia_start, contexto_mes, dt_b)
+                        if dt: datas_base.append(dt)
+                        i += 1
+                        continue
+                
+                # Token não reconhecido, avança
+                i += 1
+
+            # Gera slots para todas as datas encontradas
+            for dt_base in datas_base:
+                s_ini = dt_base.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
+                s_fim = dt_base.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
+                if s_fim < s_ini: s_fim += timedelta(days=1)
+                
+                slots.append({'inicio': s_ini, 'fim': s_fim})
 
     return slots
