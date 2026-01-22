@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V16.1: Correção bug dias compostos (WED/THU) e suporte completo a complexidade híbrida.
+    V17: Tokenizador Simplificado (Robustez para WED/THU) e Lógica Híbrida.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -63,11 +63,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     slots = []
     text = str(item_d_text).upper()
-    text = " ".join(text.split())
+    text = " ".join(text.split()) # Sanitização básica
     
     contexto_ano = dt_b.year
 
-    # --- FASE 0: PEELING (Data+Hora Misturados) ---
+    # --- FASE 0: PEELING (Extração Cirúrgica de Data+Hora misturados) ---
     re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
     for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
@@ -122,27 +122,29 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         filtro_semana_deste_segmento = set()
         achou_nova_definicao = False
 
-        tokens = re.findall(r'[A-Z]+(?:/[A-Z]+)?|\d+(?:/\d+)?', segmento)
-        tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
+        # --- TOKENIZADOR SIMPLIFICADO (V17) ---
+        # Captura qualquer bloco de letras/números/barras. Ex: "WED/THU" vira um token só.
+        tokens = re.findall(r'[A-Za-z0-9/]+', segmento)
         
         tem_conteudo_data = any(t in MONTH_MAP or t[0].isdigit() for t in tokens)
         tem_conteudo_semana = any(t.split("/")[0] in WEEK_MAP for t in tokens)
 
         if tem_conteudo_data or tem_conteudo_semana:
             achou_nova_definicao = True
+            
+            # --- SCANNER DE SEMANA (Busca WED/THU, FRI, etc) ---
             k = 0 
             while k < len(tokens):
                 tok = tokens[k]
                 
-                # --- Lógica corrigida para dias com barra (WED/THU) ---
-                if not tok[0].isdigit() and "/" in tok:
+                # Caso Composto com Barra (WED/THU)
+                if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
                     for p in partes:
                         if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
-                    k += 1
-                    continue
-                # ------------------------------------------------------
-
+                    k += 1; continue
+                
+                # Caso Simples (WED) ou Intervalo (WED TIL FRI)
                 if tok in WEEK_MAP:
                     idx_tok = WEEK_MAP[tok]
                     if k + 2 < len(tokens) and tokens[k+1] == "TIL":
@@ -157,14 +159,19 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     filtro_semana_deste_segmento.add(idx_tok); k += 1
                 else: k += 1
             
+            # --- SCANNER DE DATAS (Busca JAN 18, 21, etc) ---
             i = 0 
             while i < len(tokens):
                 tok = tokens[i]
+                
+                # Pula tokens de semana para não confundir
+                if tok in WEEK_MAP or ("/" in tok and not tok[0].isdigit()): i += 1; continue
+                if tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or ("/" in tokens[i-1] and not tokens[i-1][0].isdigit())): i += 1; continue
+
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
-                if tok in WEEK_MAP or (not tok[0].isdigit() and "/" in tok) or (tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or "/" in tokens[i-1])): i += 1; continue
                 
                 if tok[0].isdigit():
-                    if "/" in tok:
+                    if "/" in tok: # Data Composta Ex: 01/02
                         partes = tok.split("/")
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                         if dt: datas_deste_segmento.append(dt)
