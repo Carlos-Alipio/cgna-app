@@ -437,4 +437,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "13/02/2026 10:00"
         }
     },
+    {
+        "id": "CASO_37",
+        "desc": "Ordem Não Cronológica: Texto volta para JAN após citar FEB",
+        "b": "2511221101",
+        "c": "2602131900",
+        "d": "NOV 22 1101-2000 DEC 24 JAN 10 27 FEB 13 1001-1900 JAN 01 18 FEB 04 1001-2359",
+        "esperado": {
+            "qtd_slots": 8,
+            "primeiro_inicio": "22/11/2025 11:01",
+            "ultimo_fim": "13/02/2026 19:00"
+        }
+    },
 ]
