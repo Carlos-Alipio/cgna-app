@@ -605,5 +605,17 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "10/11/2025 18:30",
             "ultimo_fim": "08/02/2026 04:00"
         }
+    },
+    {
+        "id": "CASO_51",
+        "desc": "Sintaxe Suja: Transição de mês com barra e espaço (30/DEC 01)",
+        "b": "2511292041",
+        "c": "2602260400",
+        "d": "NOV 29/30 2041-0400 30/DEC 01 TIL FEB 25/26 1000-0400",
+        "esperado": {
+            "qtd_slots": 89,
+            "primeiro_inicio": "29/11/2025 20:41",
+            "ultimo_fim": "25/02/2026 10:00"
+        }
     }
 ]
