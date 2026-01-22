@@ -498,4 +498,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "23/02/2026 19:00"
         }
     },
+    {
+        "id": "CASO_42",
+        "desc": "DLY Simples com Limites Exatos (Começa em B e Termina em C)",
+        "b": "2601260320",
+        "c": "2602130750",
+        "d": "DLY 0320-0750",
+        "esperado": {
+            "qtd_slots": 19,
+            "primeiro_inicio": "26/01/2026 03:20",
+            "ultimo_fim": "13/02/2026 07:50"
+        }
+    },
 ]
