@@ -302,4 +302,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "14/02/2026 07:50"
         }
     },
+    {
+        "id": "CASO_26",
+        "desc": "Múltiplos Grupos de Datas Específicas com Horários Diferentes",
+        "b": "2601170450",
+        "c": "2603280755",
+        "d": "JAN 17 18 0450-0735 19 21 24 31 FEB 07 08 09 11 14 MAR 07 08 09 11 14 21 28 0455-0755",
+        "esperado": {
+            "qtd_slots": 18,
+            "primeiro_inicio": "17/01/2026 04:50",
+            "ultimo_fim": "28/03/2026 07:55"
+        }
+    },
 ]
