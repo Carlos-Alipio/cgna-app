@@ -25,56 +25,36 @@ def parse_notam_date(date_str):
     except: return None
 
 def criar_data_segura(ano, mes, dia):
-    """Cria data validando dias (ex: 30 de Fev vira None)"""
     try:
         return datetime(ano, mes, dia)
-    except:
-        return None
+    except: return None
 
 def gerar_sequencia_datas(ano_base, mes_ini, dia_ini, mes_fim, dia_fim):
-    """
-    Gera lista de datetimes entre duas datas que podem ser de meses diferentes.
-    Ex: FEB 02 TIL APR 10
-    """
     datas = []
-    
-    # Monta data inicial e final
     dt_start = criar_data_segura(ano_base, mes_ini, dia_ini)
-    if not dt_start: return []
-    
-    # Ajuste de virada de ano para a data inicial (ex: DEZ -> JAN do próximo ano)
-    # (Lógica simplificada: se estamos gerando, assumimos ano base, o ajuste fino vem depois)
-    
     dt_end = criar_data_segura(ano_base, mes_fim, dia_fim)
-    if not dt_end: return []
     
-    # Se o mês final for menor que o inicial, assume que virou o ano
+    if not dt_start or not dt_end: return []
+    
+    # Ajuste simples de virada de ano no range
     if dt_end < dt_start:
         dt_end = dt_end.replace(year=ano_base + 1)
         
-    # Loop dia a dia
     curr = dt_start
     while curr <= dt_end:
         datas.append(curr)
         curr += timedelta(days=1)
-        
     return datas
 
 def ajustar_ano_referencia(dt, dt_referencia_b):
-    """
-    Ajusta o ano da data gerada (dt) comparando com a data de início do NOTAM (B).
-    Garante que JAN não fique antes de DEZ se o NOTAM começou em DEZ.
-    """
     if not dt: return None
-    # Se a data gerada tem mês menor que a data B (ex: JAN < DEZ) e B é final de ano,
-    # provavelmente a data gerada pertence ao ano seguinte.
     if dt.month < dt_referencia_b.month and dt_referencia_b.month > 10:
         return dt.replace(year=dt_referencia_b.year + 1)
     return dt
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V6: Tokenizer Agressivo + Lógica de Range Multi-Mês.
+    V7: Suporte Total a Ranges (Dias do Mês e Dias da Semana).
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = parse_notam_date(item_c_raw)
@@ -83,12 +63,10 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     slots = []
     text = item_d_text.upper().strip()
     
-    # Regex para capturar horários (HHMM-HHMM)
     re_horario = re.compile(r'(\d{4})-(\d{4})')
     matches = list(re_horario.finditer(text))
     
     last_end = 0
-    # Contexto global de ano/mês (iniciado com a data B)
     contexto_ano = dt_b.year
     contexto_mes = dt_b.month 
 
@@ -97,88 +75,86 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     for match in matches:
         h_ini_str, h_fim_str = match.groups()
-        segmento = text[last_end:match.start()] # Texto cru
+        segmento = text[last_end:match.start()]
         last_end = match.end()
         
-        # --- CASO DLY ---
         if "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c:
                 s_ini = curr.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
                 s_fim = curr.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
                 if s_fim < s_ini: s_fim += timedelta(days=1)
-                
                 if s_fim >= dt_b and s_ini <= dt_c:
                     slots.append({'inicio': s_ini, 'fim': s_fim})
                 curr += timedelta(days=1)
         
-        # --- CASO COMPLEXO (Tokens) ---
         else:
-            # Tokenizer V6: Separa Letras de Números agressivamente
-            # Ex: "16TUE" -> "16", "TUE". "JAN/FEB" -> "JAN", "FEB"
             tokens = re.findall(r'[A-Za-z]+|\d+', segmento)
             
-            # 1. Identificar Filtros de Semana (MON, TUE...)
+            # --- 1. SCANNER DE DIAS DA SEMANA (COM RANGES) ---
             dias_permitidos = set()
-            for tok in tokens:
+            k = 0
+            while k < len(tokens):
+                tok = tokens[k]
                 if tok in WEEK_MAP:
-                    dias_permitidos.add(WEEK_MAP[tok])
+                    # Verifica se é Range: [DIA] [TIL] [DIA]
+                    if k + 2 < len(tokens) and tokens[k+1] == "TIL" and tokens[k+2] in WEEK_MAP:
+                        idx_start = WEEK_MAP[tok]
+                        idx_end = WEEK_MAP[tokens[k+2]]
+                        
+                        if idx_start <= idx_end:
+                            dias_permitidos.update(range(idx_start, idx_end + 1))
+                        else:
+                            # Range circular (ex: FRI TIL MON -> Sex, Sab, Dom, Seg)
+                            dias_permitidos.update(range(idx_start, 7))
+                            dias_permitidos.update(range(0, idx_end + 1))
+                        k += 3 # Pula os 3 tokens usados
+                    else:
+                        # Dia único
+                        dias_permitidos.add(WEEK_MAP[tok])
+                        k += 1
+                else:
+                    k += 1
             
-            # 2. Processar Datas
+            # --- 2. SCANNER DE DATAS ---
             i = 0
             datas_candidatas = []
             
             while i < len(tokens):
                 tok = tokens[i]
                 
-                # A) É Mês? Atualiza contexto
                 if tok in MONTH_MAP:
                     contexto_mes = MONTH_MAP[tok]
                     i += 1
                     continue
                 
-                # B) É Dia da Semana? Pula (já lido)
-                if tok in WEEK_MAP or tok == "TIL":
+                # Ignora tokens de semana já processados
+                if tok in WEEK_MAP or (tok == "TIL" and i>0 and tokens[i-1] in WEEK_MAP):
                     i += 1
                     continue
 
-                # C) É Número? (Dia)
                 if tok.isdigit():
                     dia_start = int(tok)
                     
-                    # Verificação de Range (Lookahead)
-                    # Padrão: [NUM] [TIL] [???]
-                    is_range = False
-                    
                     if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                         alvo = tokens[i+2]
-                        
-                        # Caso C1: Range Simples (NUM TIL NUM) -> 03 TIL 11
-                        if alvo.isdigit():
+                        if alvo.isdigit(): # Range Simples
                             dia_end = int(alvo)
-                            # Range no mesmo mês
                             lista_dt = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, contexto_mes, dia_end)
                             datas_candidatas.extend(lista_dt)
                             i += 3
                             continue
-                            
-                        # Caso C2: Range Entre Meses (NUM TIL MES NUM) -> 02 TIL APR 10
-                        elif alvo in MONTH_MAP:
+                        elif alvo in MONTH_MAP: # Range Multi-Mês
                             mes_dest = MONTH_MAP[alvo]
-                            # Precisa do dia final depois do mês
                             if i + 3 < len(tokens) and tokens[i+3].isdigit():
                                 dia_dest = int(tokens[i+3])
-                                
-                                # Gera range cruzando meses
                                 lista_dt = gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_dest)
                                 datas_candidatas.extend(lista_dt)
-                                
-                                # Atualiza contexto para o mês onde paramos
                                 contexto_mes = mes_dest
                                 i += 4
                                 continue
 
-                    # Caso C3: Número Solto (não é range ou falhou check de range)
+                    # Single
                     dt = criar_data_segura(contexto_ano, contexto_mes, dia_start)
                     if dt: datas_candidatas.append(dt)
                     i += 1
@@ -186,13 +162,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 
                 i += 1
 
-            # 3. Aplicar Filtro e Horários
+            # --- 3. GERAÇÃO DE SLOTS ---
             for dt_crua in datas_candidatas:
-                # Ajusta ano (virada de ano) baseado na Data B
                 dt_final = ajustar_ano_referencia(dt_crua, dt_b)
                 if not dt_final: continue
 
-                # Filtro de Dia da Semana
                 if dias_permitidos and dt_final.weekday() not in dias_permitidos:
                     continue
                 
