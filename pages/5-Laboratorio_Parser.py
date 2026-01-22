@@ -74,14 +74,24 @@ st.subheader("🔬 Testar Novo Caso")
 c1, c2, c3 = st.columns(3)
 with c1:
     dt_inicio = st.date_input("Data Início (B)", value=datetime.now())
-    hr_inicio = st.time_input("Hora Início (B)", value=datetime.strptime("00:00", "%H:%M").time())
+    # ALTERADO: Campo Livre
+    hr_inicio = st.text_input("Hora Início (B)", value="00:00", help="Ex: 0440 ou 04:40")
+    
 with c2:
     dt_fim = st.date_input("Data Fim (C)", value=datetime.now())
-    hr_fim = st.time_input("Hora Fim (C)", value=datetime.strptime("23:59", "%H:%M").time())
+    # ALTERADO: Campo Livre
+    hr_fim = st.text_input("Hora Fim (C)", value="23:59", help="Ex: 0750 ou 07:50")
+
 with c3:
-    raw_b = datetime.combine(dt_inicio, hr_inicio).strftime("%y%m%d%H%M")
-    raw_c = datetime.combine(dt_fim, hr_fim).strftime("%y%m%d%H%M")
-    st.caption(f"Raw B: {raw_b} | Raw C: {raw_c}")
+    # Tratamento para gerar o RAW corretamente independente se usar : ou não
+    h_i_clean = hr_inicio.replace(":", "").strip().zfill(4)
+    h_f_clean = hr_fim.replace(":", "").strip().zfill(4)
+    
+    raw_b = dt_inicio.strftime("%y%m%d") + h_i_clean
+    raw_c = dt_fim.strftime("%y%m%d") + h_f_clean
+    
+    st.caption(f"Raw B: {raw_b}")
+    st.caption(f"Raw C: {raw_c}")
 
 texto_d = st.text_area("Texto Item D (Novo):", height=80)
 
@@ -118,6 +128,7 @@ if st.button("Processar Novo Caso", type="primary"):
             """
             st.code(code_snippet, language="python")
             
+            st.metric("Slots Gerados", len(df))
             st.dataframe(df[['Dia', 'Início', 'Fim']], use_container_width=True)
             
     except Exception as e:
