@@ -62,14 +62,22 @@ def resolver_dia_semana_composto(token):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V12: Correção de Herança de Datas quando apenas Dias da Semana mudam.
+    V13: Suporte a 'PERM' no campo C (Adiciona 365 dias de validade).
     """
     dt_b = parse_notam_date(item_b_raw)
-    dt_c = parse_notam_date(item_c_raw)
+    
+    # Tratamento para PERM
+    dt_c = None
+    if item_c_raw and "PERM" in str(item_c_raw).upper():
+        if dt_b:
+            dt_c = dt_b + timedelta(days=365)
+    else:
+        dt_c = parse_notam_date(item_c_raw)
+
     if not dt_b or not dt_c: return []
 
     slots = []
-    text = item_d_text.upper().strip()
+    text = str(item_d_text).upper().strip() if item_d_text else ""
     
     re_horario = re.compile(r'(\d{4})-(\d{4})')
     matches = list(re_horario.finditer(text))
@@ -81,6 +89,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     ultima_lista_datas = [] 
     ultimo_filtro_semana = set()
 
+    # Se não houver horários (Item D vazio ou sem padrão HHMM-HHMM)
     if not matches:
         return [{'inicio': dt_b, 'fim': dt_c}]
 
@@ -183,9 +192,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         continue
                     i += 1
                 
-                # --- CORREÇÃO V12: Lógica de Herança Híbrida ---
-                # Se achamos dias da semana novos, mas NENHUMA data nova foi gerada,
-                # significa que o usuário quer aplicar os novos dias às datas antigas.
+                # Herança Híbrida
                 if not datas_deste_segmento and ultima_lista_datas:
                     datas_deste_segmento = list(ultima_lista_datas)
 
