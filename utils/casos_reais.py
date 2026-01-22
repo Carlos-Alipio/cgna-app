@@ -474,4 +474,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "16/02/2026 02:59"
         }
     },
+    {
+        "id": "CASO_40",
+        "desc": "DLY com múltiplos horários (1000-1030 2030-2100) e Corte no Início (B)",
+        "b": "2512232030",
+        "c": "2603182100",
+        "d": "DLY 1000-1030 2030-2100",
+        "esperado": {
+            "qtd_slots": 171,
+            "primeiro_inicio": "23/12/2025 20:30", # O horário das 10:00 foi cortado
+            "ultimo_fim": "18/03/2026 21:00"
+        }
+    },
 ]
