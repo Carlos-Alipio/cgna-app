@@ -449,4 +449,17 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "13/02/2026 19:00"
         }
     },
+    {
+        "id": "CASO_38",
+        "desc": "Ordem Não Cronológica com Horários da Madrugada (0000-0100)",
+        "b": "2511222001",
+        "c": "2602132000",
+        "d": "NOV 22 2001-2100 DEC 24 JAN 10 27 FEB 13 1901-2000 JAN 02 19 FEB 05 0000-0100",
+        "esperado": {
+            "qtd_slots": 8,
+            "primeiro_inicio": "22/11/2025 20:01",
+            "ultimo_fim": "13/02/2026 20:00" 
+            # O dia 13/02 é cronologicamente posterior ao dia 05/02 do último grupo.
+        }
+    },
 ]
