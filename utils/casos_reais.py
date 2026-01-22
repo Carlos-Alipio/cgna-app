@@ -353,4 +353,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "28/01/2026 14:00"
         }
     },
+    {
+        "id": "CASO_30",
+        "desc": "Listas de Datas Disjuntas com Horários Diferentes",
+        "b": "2602021100",
+        "c": "2603281100",
+        "d": "FEB 02 11 20 MAR 01 09 18 1100-1200 MAR 28 1000-1100",
+        "esperado": {
+            "qtd_slots": 7,
+            "primeiro_inicio": "02/02/2026 11:00",
+            "ultimo_fim": "28/03/2026 11:00"
+        }
+    },
 ]
