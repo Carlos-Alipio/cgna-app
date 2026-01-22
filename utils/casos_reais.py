@@ -193,5 +193,17 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "01/12/2025 21:33",
             "ultimo_fim": "28/02/2026 16:30"  # <--- CORRIGIDO AQUI (Era 07:45)
         }
-    }
+    },
+    {
+        "id": "CASO_17",
+        "desc": "Item D Vazio ou Genérico (Evento Único B -> C)",
+        "b": "2602080825",
+        "c": "2602081155",
+        "d": "", # Campo vazio
+        "esperado": {
+            "qtd_slots": 1,
+            "primeiro_inicio": "08/02/2026 08:25",
+            "ultimo_fim": "08/02/2026 11:55"
+        }
+    },
 ]
