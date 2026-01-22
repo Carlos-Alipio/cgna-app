@@ -871,4 +871,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "24/02/2026 20:00"
         }
     },
+    {
+        "id": "CASO_73",
+        "desc": "Filtros Semanais Distintos: MON SUN em Jan e WED THU até Abril",
+        "b": "2601110330",
+        "c": "2604090759",
+        "d": "JAN 11 TIL JAN 26 MON SUN 0330-0759 JAN 28 TIL APR 9 WED THU 0330-0759",
+        "esperado": {
+            "qtd_slots": 28,
+            "primeiro_inicio": "11/01/2026 03:30",
+            "ultimo_fim": "09/04/2026 07:59"
+        }
+    },
 ]
