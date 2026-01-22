@@ -763,4 +763,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "12/04/2026 20:00"
         }
     },
+    {
+        "id": "CASO_64",
+        "desc": "Transição: Slot fixo no dia 1 e rotina DLY SR-SS (0800-2000) nos meses seguintes",
+        "b": "2601202016",
+        "c": "2604192101",
+        "d": "JAN 20 2016-2150 21 TIL APR 19 SR-SS",
+        "esperado": {
+            "qtd_slots": 90,
+            "primeiro_inicio": "20/01/2026 20:16",
+            "ultimo_fim": "19/04/2026 20:00"
+        }
+    },
 ]
