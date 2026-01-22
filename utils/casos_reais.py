@@ -278,4 +278,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "25/03/2026 11:30"
         }
     },
+    {
+        "id": "CASO_24",
+        "desc": "Limite C (00:00) cortando o último dia do Texto (TIL APR 30)",
+        "b": "2602031200",
+        "c": "2604300000",
+        "d": "FEB 03 TIL APR 30 DLY 1200-0000",
+        "esperado": {
+            "qtd_slots": 86,
+            "primeiro_inicio": "03/02/2026 12:00",
+            "ultimo_fim": "30/04/2026 00:00" # Fim do slot do dia 29
+        }
+    },
 ]
