@@ -29,5 +29,19 @@ CASOS_BLINDADOS = [
             "primeiro_inicio": "20/01/2026 11:00",
             "ultimo_fim": "30/01/2026 19:00" # O último cronológico é dia 30
         }
-    }
+    },
+    {
+        "id": "CASO_03",
+        "desc": "Scanner Linear com Herança de Mês (FEB/MAR) e Tokenizer",
+        "b": "2602010440",
+        "c": "2603260745",
+        "d": "FEB 01 03 TIL 11 MAR 09 TIL 13 0440-0745 23 TIL 26 0450-0745",
+        "esperado": {
+            "qtd_slots": 19,
+            "primeiro_inicio": "01/02/2026 04:40",
+            "ultimo_fim": "26/03/2026 07:45"
+        }
+    },
+
+
 ]
