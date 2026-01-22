@@ -667,4 +667,16 @@ CASOS_BLINDADOS = [
             "ultimo_fim": "14/03/2026 04:00"
         }
     },
+    {
+        "id": "CASO_56",
+        "desc": "Multi-segmento: Listas disjuntas para horários matinais e vespertinos (Dez-Jan)",
+        "b": "2512190301",
+        "c": "2601280900",
+        "d": "DEC 19 TIL 20 29 TIL 31 JAN 01 TIL 03 13 TIL 17 27 TIL 28 0301-0900 DEC 22 TIL 26 JAN 05 TIL 09 19 TIL 23 1700-2100",
+        "esperado": {
+            "qtd_slots": 30,
+            "primeiro_inicio": "19/12/2025 03:01",
+            "ultimo_fim": "28/01/2026 09:00"
+        }
+    },
 ]
