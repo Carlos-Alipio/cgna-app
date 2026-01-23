@@ -1,7 +1,10 @@
 import re
 from datetime import datetime, timedelta
 
-# --- MAPEAMENTOS GLOBAIS ---
+# ==============================================================================
+# CONSTANTES E MAPEAMENTOS
+# ==============================================================================
+
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
     "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
@@ -12,6 +15,10 @@ WEEK_MAP = {
     "MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6,
     "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3, "SEX": 4, "SAB": 5, "DOM": 6
 }
+
+# ==============================================================================
+# FUNÇÕES AUXILIARES
+# ==============================================================================
 
 def parse_notam_date(date_str):
     try:
@@ -47,12 +54,12 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
         return dt.replace(year=dt_referencia_b.year + 1)
     return dt
 
+# ==============================================================================
+# FUNÇÃO PRINCIPAL (V21.0 - V18.3 + Fallback de Semana)
+# ==============================================================================
+
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
-    """
-    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
-    """
     dt_b = parse_notam_date(item_b_raw)
-    
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
         if dt_b: dt_c = dt_b + timedelta(days=365)
@@ -64,7 +71,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     slots = []
     text = str(item_d_text).upper()
 
-    # --- SUPORTE A HORÁRIOS SOLARES ---
+    # Placeholders Solares
     SR_PLACEHOLDER = "0800"
     SS_PLACEHOLDER = "2000"
     text = re.sub(r'\bSR\b', SR_PLACEHOLDER, text)
@@ -75,7 +82,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     
     contexto_ano = dt_b.year
 
-    # --- FASE 0: PEELING ---
+    # --- FASE 0: PEELING (Mantido V18.3) ---
     re_hibrido = re.compile(r'([A-Z]{3})\s+(\d{1,2})\s+(\d{4})\s+TIL\s+(?:([A-Z]{3})\s+)?(\d{1,2})\s+(\d{4})')
     for match in re_hibrido.finditer(text):
         m1, d1, h1, m2, d2, h2 = match.groups()
@@ -90,14 +97,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 end = dt2.replace(hour=int(h2[:2]), minute=int(h2[2:]))
                 if end < start: end = end.replace(year=end.year + 1)
                 
-                # Clipping Fase 0
                 if not (end <= dt_b or start >= dt_c):
                     slots.append({'inicio': max(start, dt_b), 'fim': min(end, dt_c)})
     text = re_hibrido.sub(' ', text)
 
     # --- FASE 1: SCANNER MESTRE ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
-    regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
+    regex_simples = r'(\d{4})\s*(?:-|TIL)\s*(\d{4})' # Ajuste leve para aceitar espaços
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
 
     matches = list(re_master.finditer(text))
@@ -192,6 +198,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
+            
+            # --- FALLBACK PARA FILTROS DE SEMANA SEM DATA ---
+            # Aqui está a correção para as anomalias do Supabase
+            if not datas_deste_segmento and filtro_semana_deste_segmento:
+                curr = dt_b
+                while curr <= dt_c + timedelta(days=1): 
+                    if curr > dt_c: break
+                    datas_deste_segmento.append(curr)
+                    curr += timedelta(days=1)
+            # ------------------------------------------------
+
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
@@ -219,7 +236,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_fim = s_fim.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             if s_fim < s_ini: s_fim += timedelta(days=1)
             
-            # Clipping Fase 1
             if s_fim <= dt_b or s_ini >= dt_c: continue
             slots.append({'inicio': max(s_ini, dt_b), 'fim': min(s_fim, dt_c)})
 
