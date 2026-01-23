@@ -9,17 +9,15 @@ from utils import db_manager, formatters, timeline_processor, pdf_generator
 st.set_page_config(page_title="Gestão de Obras", layout="wide")
 st.title("🚨 Monitoramento & Cadastro de Obras")
 
-# --- ESTILIZAÇÃO CUSTOMIZADA (BOTÕES ROXOS E LISTA) ---
+# --- ESTILIZAÇÃO CUSTOMIZADA ---
 st.markdown("""
     <style>
-    /* Estilo para a lista de blocos */
-    div.stButton > button:first-child {
-        text-align: left;
-        padding-left: 15px;
+    /* Alinha o texto dos botões à esquerda na lista de blocos */
+    div[data-testid="column"] button {
+        text-align: left !important;
     }
-    /* Destaque para bloco ativo */
-    .bloco-ativo {
-        border: 2px solid #7C3AED !important;
+    .stButton button {
+        min-height: 45px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -28,16 +26,16 @@ st.markdown("""
 if 'dias_selecionados' not in st.session_state: st.session_state.dias_selecionados = set()
 if 'notam_ativo' not in st.session_state: st.session_state.notam_ativo = None
 if 'cache_slots' not in st.session_state: st.session_state.cache_slots = [] 
-if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id = None # Controla quem estou editando
+if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id = None 
 
-# --- VARIÁVEIS DE CONTROLE UI (Para forçar atualização dos widgets) ---
+# Variáveis de Controle UI (para persistir valores ao trocar de bloco)
 if 'ui_ano' not in st.session_state: st.session_state.ui_ano = datetime.now().year
 if 'ui_mes_idx' not in st.session_state: st.session_state.ui_mes_idx = datetime.now().month - 1
 if 'ui_hora_ini' not in st.session_state: st.session_state.ui_hora_ini = time(8, 0)
 if 'ui_hora_fim' not in st.session_state: st.session_state.ui_hora_fim = time(17, 0)
 
 # ==============================================================================
-# 1. CARREGAMENTO E PREPARAÇÃO
+# 1. CARREGAMENTO E PREPARAÇÃO DOS DADOS
 # ==============================================================================
 df_notams = db_manager.carregar_notams()
 df_config = db_manager.carregar_filtros_configurados()
@@ -46,24 +44,26 @@ if df_notams.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# Garante ID único
+# Garante ID único para os NOTAMs
 if 'id_notam' not in df_notams.columns:
     df_notams['loc'] = df_notams['loc'].astype(str)
     df_notams['n'] = df_notams['n'].astype(str)
     df_notams['id_notam'] = df_notams['loc'] + "_" + df_notams['n']
 
-# Filtros
+# Filtros Críticos
 filtros_assunto = df_config[df_config['tipo'] == 'assunto']['valor'].tolist()
 filtros_condicao = df_config[df_config['tipo'] == 'condicao']['valor'].tolist()
 
+# Filtra Frota
 frota = db_manager.carregar_frota_monitorada()
 df_base = df_notams[df_notams['loc'].isin(frota)] if frota else df_notams
 
+# Filtra Assunto/Condição
 mask_assunto = df_base['assunto_desc'].isin(filtros_assunto)
 mask_condicao = df_base['condicao_desc'].isin(filtros_condicao)
 df_critico = df_base[mask_assunto & mask_condicao].copy()
 
-# Limpeza
+# Limpeza de dados órfãos (Remove cadastros de NOTAMs que já expiraram)
 ids_ativos = df_critico['id_notam'].unique().tolist()
 db_manager.limpar_registros_orfaos(ids_ativos)
 
@@ -82,21 +82,29 @@ def carregar_bloco_para_edicao(block_id):
     first_slot = None
     
     for s in slots_do_bloco:
-        # Converte string ISO para datetime se necessário
-        dt_start = datetime.fromisoformat(s['start']) if isinstance(s['start'], str) else s['start']
+        # Garante conversão segura de string para datetime
+        start_val = s['start']
+        if isinstance(start_val, str):
+            dt_start = datetime.fromisoformat(start_val)
+        else:
+            dt_start = start_val
+            
         st.session_state.dias_selecionados.add(dt_start.strftime("%Y-%m-%d"))
         
         if first_slot is None: first_slot = s
 
-    # 2. Recupera Horários e Mês de Referência (baseado no 1º slot)
-    dt_ref = datetime.fromisoformat(first_slot['start']) if isinstance(first_slot['start'], str) else first_slot['start']
-    dt_end_ref = datetime.fromisoformat(first_slot['end']) if isinstance(first_slot['end'], str) else first_slot['end']
+    # 2. Recupera Horários e Mês de Referência
+    if isinstance(first_slot['start'], str):
+        dt_ref = datetime.fromisoformat(first_slot['start'])
+        dt_end_ref = datetime.fromisoformat(first_slot['end'])
+    else:
+        dt_ref = first_slot['start']
+        dt_end_ref = first_slot['end']
     
     # Atualiza variaveis de UI
     st.session_state.ui_ano = dt_ref.year
     st.session_state.ui_mes_idx = dt_ref.month - 1
     st.session_state.ui_hora_ini = dt_ref.time()
-    # Se for overnight, a hora fim é a hora do dia seguinte, mas o objeto time é o mesmo
     st.session_state.ui_hora_fim = dt_end_ref.time()
     
     # 3. Define modo de edição
@@ -106,7 +114,6 @@ def limpar_editor():
     """Reseta o calendário para modo 'Novo Bloco'"""
     st.session_state.dias_selecionados = set()
     st.session_state.editing_block_id = None
-    # Mantém o mês/ano atual ou reseta, como preferir
     st.session_state.ui_hora_ini = time(8, 0)
     st.session_state.ui_hora_fim = time(17, 0)
 
@@ -161,6 +168,7 @@ with tab_cadastro:
     with col_blocos:
         st.subheader("2. Blocos")
         
+        # --- CORREÇÃO APLICADA AQUI: if notam_selecionado is not None ---
         if notam_selecionado is None:
             st.info("👈 Selecione um NOTAM.")
         else:
@@ -174,15 +182,17 @@ with tab_cadastro:
             if st.session_state.cache_slots:
                 # Agrupa slots por Block ID para criar os botões
                 df_slots = pd.DataFrame(st.session_state.cache_slots)
+                
                 # Converte para datetime para garantir ordenação e formatação
-                df_slots['start'] = pd.to_datetime(df_slots['start'])
-                df_slots['end'] = pd.to_datetime(df_slots['end'])
+                # Trata strings ISO se vierem do banco
+                df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
+                df_slots['end_dt'] = pd.to_datetime(df_slots['end'])
                 
                 # Agrupamento
                 df_blocos = df_slots.groupby('block_id').agg(
-                    inicio_min=('start', 'min'),
-                    inicio_max=('start', 'max'),
-                    horario_str=('start', lambda x: x.iloc[0].strftime('%H:%M')),
+                    inicio_min=('start_dt', 'min'),
+                    inicio_max=('start_dt', 'max'),
+                    horario_str=('start_dt', lambda x: x.iloc[0].strftime('%H:%M')),
                     qtd=('id', 'count')
                 ).reset_index().sort_values('inicio_min')
 
@@ -209,7 +219,8 @@ with tab_cadastro:
     # COLUNA 3: EDITOR VISUAL (Calendário)
     # ----------------------------------------------------------------------
     with col_editor:
-        if notam_selecionado:
+        # --- CORREÇÃO APLICADA AQUI TAMBÉM ---
+        if notam_selecionado is not None:
             # Título Contextual
             modo = "✏️ EDITANDO BLOCO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
             st.subheader(f"3. Calendário ({modo})")
@@ -226,7 +237,7 @@ with tab_cadastro:
                     "Mês", 
                     mes_nomes, 
                     index=st.session_state.ui_mes_idx,
-                    key="widget_mes" # Chave diferente para não conflitar diretamente, controlamos via index
+                    key="widget_mes" 
                 )
                 # Atualiza o index no state para sincronia
                 st.session_state.ui_mes_idx = mes_nomes.index(mes_sel_txt)
