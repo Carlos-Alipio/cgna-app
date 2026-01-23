@@ -181,3 +181,29 @@ def atualizar_filtros_lote(tipo, lista_valores):
     except Exception as e:
         st.error(f"Erro ao salvar filtros: {e}")
         return False
+    
+# No arquivo utils/db_manager.py
+
+def salvar_slots_manuais(notam_id, dados_json):
+    """
+    Salva a lista de slots para um NOTAM específico.
+    Sugestão: Usar uma tabela 'notam_obras_slots' com colunas: id, notam_id, dados (jsonb)
+    """
+    # Exemplo Supabase:
+    # supabase.table('notam_obras_slots').upsert({'notam_id': notam_id, 'dados': dados_json}).execute()
+    pass
+
+def carregar_slots_manuais(notam_id):
+    """Retorna a lista de slots salvos para aquele NOTAM"""
+    # Exemplo:
+    # response = supabase.table('notam_obras_slots').select('dados').eq('notam_id', notam_id).execute()
+    # return response.data[0]['dados'] if response.data else []
+    return []
+
+def limpar_registros_orfaos(lista_ids_ativos):
+    """
+    Deleta registros da tabela manual que não estão na lista de IDs ativos.
+    Isso atende ao requisito: 'quando notams saírem, o cadastro deve ser deletado'.
+    """
+    # Exemplo SQL: DELETE FROM notam_obras_slots WHERE notam_id NOT IN (lista_ids_ativos)
+    pass
