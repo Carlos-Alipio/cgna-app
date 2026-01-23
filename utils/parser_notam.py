@@ -55,14 +55,10 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL (V19.1 - PRECISION FIX)
+# FUNÇÃO PRINCIPAL (V20.0 - FINAL FIX)
 # ==============================================================================
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
-    """
-    V19.1: Base V19.0 + Poda de Overnights duplicados e Ajuste de Regex Contínuo.
-    Objetivo: Zerar os 13 erros remanescentes.
-    """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
@@ -175,19 +171,29 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         alvo_tok = tokens[k+2]
                         if alvo_tok in WEEK_MAP:
                             idx_alvo = WEEK_MAP[alvo_tok]
+                            
+                            # Tratamento para TIL THU/FRI em Overnight
+                            if "/" in alvo_tok:
+                                subpartes = alvo_tok.split("/")
+                                if subpartes[0] in WEEK_MAP:
+                                    idx_alvo = WEEK_MAP[subpartes[0]] # Pega só o primeiro dia do par final
+                            
                             if idx_tok <= idx_alvo: filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
                             else: 
                                 filtro_semana_deste_segmento.update(range(idx_tok, 7))
                                 filtro_semana_deste_segmento.update(range(0, idx_alvo + 1))
                             k += 3; continue
                     filtro_semana_deste_segmento.add(idx_tok); k += 1
-                else: k += 1
+                else: 
+                    k += 1
             
+            # Datas Numéricas
             i = 0 
             while i < len(tokens):
                 tok = tokens[i]
                 if tok in WEEK_MAP or ("/" in tok and not tok[0].isdigit()): i += 1; continue
                 if tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or ("/" in tokens[i-1] and not tokens[i-1][0].isdigit())): i += 1; continue
+                
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
                 
                 if tok[0].isdigit():
@@ -231,7 +237,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         i += 1; continue
                 i += 1
             
-            # FIX: Fallback TUE TIL SAT
+            # Fallback TUE TIL SAT
             if not datas_deste_segmento and filtro_semana_deste_segmento:
                 curr = dt_b
                 while curr <= dt_c + timedelta(days=1): 
@@ -254,7 +260,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
-        # Geração
+        # Geração dos Slots
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
