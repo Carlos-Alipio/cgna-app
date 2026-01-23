@@ -19,6 +19,10 @@ st.markdown("""
     .stButton button {
         min-height: 45px;
     }
+    /* Destaque para bloco ativo na lista */
+    .bloco-ativo {
+        border: 2px solid #7C3AED !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -28,7 +32,7 @@ if 'notam_ativo' not in st.session_state: st.session_state.notam_ativo = None
 if 'cache_slots' not in st.session_state: st.session_state.cache_slots = [] 
 if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id = None 
 
-# Variáveis de Controle UI (para persistir valores ao trocar de bloco)
+# Variáveis de Controle UI (Persistência dos Widgets)
 if 'ui_ano' not in st.session_state: st.session_state.ui_ano = datetime.now().year
 if 'ui_mes_idx' not in st.session_state: st.session_state.ui_mes_idx = datetime.now().month - 1
 if 'ui_hora_ini' not in st.session_state: st.session_state.ui_hora_ini = time(8, 0)
@@ -63,16 +67,24 @@ mask_assunto = df_base['assunto_desc'].isin(filtros_assunto)
 mask_condicao = df_base['condicao_desc'].isin(filtros_condicao)
 df_critico = df_base[mask_assunto & mask_condicao].copy()
 
-# Limpeza de dados órfãos (Remove cadastros de NOTAMs que já expiraram)
+# Limpeza de dados órfãos
 ids_ativos = df_critico['id_notam'].unique().tolist()
 db_manager.limpar_registros_orfaos(ids_ativos)
 
 # ==============================================================================
-# FUNÇÕES DE LÓGICA DE INTERFACE
+# FUNÇÕES DE CALLBACK (A SOLUÇÃO PARA O ERRO STREAMLIT API)
 # ==============================================================================
 
-def carregar_bloco_para_edicao(block_id):
-    """Recupera dados do bloco e popula o calendário e inputs"""
+def limpar_editor_callback():
+    """Reseta o calendário para modo 'Novo Bloco'"""
+    st.session_state.dias_selecionados = set()
+    st.session_state.editing_block_id = None
+    st.session_state.ui_hora_ini = time(8, 0)
+    st.session_state.ui_hora_fim = time(17, 0)
+    # Não resetamos o mês/ano para manter o contexto do usuário
+
+def carregar_bloco_callback(block_id):
+    """Carrega um bloco para edição"""
     slots_do_bloco = [s for s in st.session_state.cache_slots if s['block_id'] == block_id]
     
     if not slots_do_bloco: return
@@ -82,7 +94,6 @@ def carregar_bloco_para_edicao(block_id):
     first_slot = None
     
     for s in slots_do_bloco:
-        # Garante conversão segura de string para datetime
         start_val = s['start']
         if isinstance(start_val, str):
             dt_start = datetime.fromisoformat(start_val)
@@ -90,10 +101,9 @@ def carregar_bloco_para_edicao(block_id):
             dt_start = start_val
             
         st.session_state.dias_selecionados.add(dt_start.strftime("%Y-%m-%d"))
-        
         if first_slot is None: first_slot = s
 
-    # 2. Recupera Horários e Mês de Referência
+    # 2. Recupera Horários e Mês
     if isinstance(first_slot['start'], str):
         dt_ref = datetime.fromisoformat(first_slot['start'])
         dt_end_ref = datetime.fromisoformat(first_slot['end'])
@@ -101,26 +111,75 @@ def carregar_bloco_para_edicao(block_id):
         dt_ref = first_slot['start']
         dt_end_ref = first_slot['end']
     
-    # Atualiza variaveis de UI
     st.session_state.ui_ano = dt_ref.year
     st.session_state.ui_mes_idx = dt_ref.month - 1
     st.session_state.ui_hora_ini = dt_ref.time()
     st.session_state.ui_hora_fim = dt_end_ref.time()
     
-    # 3. Define modo de edição
     st.session_state.editing_block_id = block_id
 
-def limpar_editor():
-    """Reseta o calendário para modo 'Novo Bloco'"""
-    st.session_state.dias_selecionados = set()
-    st.session_state.editing_block_id = None
-    st.session_state.ui_hora_ini = time(8, 0)
-    st.session_state.ui_hora_fim = time(17, 0)
-
-def toggle_dia(a, m, d):
+def toggle_dia_callback(a, m, d):
+    """Liga/Desliga dia no calendário"""
     k = f"{a}-{m:02d}-{d:02d}"
-    if k in st.session_state.dias_selecionados: st.session_state.dias_selecionados.remove(k)
-    else: st.session_state.dias_selecionados.add(k)
+    if k in st.session_state.dias_selecionados:
+        st.session_state.dias_selecionados.remove(k)
+    else:
+        st.session_state.dias_selecionados.add(k)
+
+def salvar_bloco_callback():
+    """Salva as alterações no banco"""
+    if not st.session_state.dias_selecionados:
+        st.toast("⚠️ Selecione dias no calendário!", icon="⚠️")
+        return
+
+    # Pega valores dos widgets do session state
+    h_ini = st.session_state.ui_hora_ini
+    h_fim = st.session_state.ui_hora_fim
+    is_overnight = h_fim < h_ini
+    
+    # Define ID do Bloco
+    if st.session_state.editing_block_id:
+        block_id_final = st.session_state.editing_block_id
+        # Remove versão antiga
+        st.session_state.cache_slots = [
+            s for s in st.session_state.cache_slots 
+            if s['block_id'] != block_id_final
+        ]
+    else:
+        block_id_final = str(uuid.uuid4())
+
+    # Gera novos slots
+    novos_slots = []
+    for str_dt in sorted(st.session_state.dias_selecionados):
+        dt_base = datetime.strptime(str_dt, "%Y-%m-%d")
+        ini = datetime.combine(dt_base, h_ini)
+        fim = datetime.combine(dt_base + timedelta(days=1 if is_overnight else 0), h_fim)
+        
+        novos_slots.append({
+            "id": str(uuid.uuid4()),
+            "notam_id": st.session_state.notam_ativo,
+            "block_id": block_id_final,
+            "start": ini.isoformat(),
+            "end": fim.isoformat()
+        })
+    
+    st.session_state.cache_slots.extend(novos_slots)
+    db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
+    
+    st.toast("✅ Bloco salvo com sucesso!", icon="💾")
+    limpar_editor_callback()
+
+def excluir_bloco_callback():
+    """Exclui o bloco em edição"""
+    if st.session_state.editing_block_id:
+        b_id = st.session_state.editing_block_id
+        st.session_state.cache_slots = [
+            s for s in st.session_state.cache_slots 
+            if s['block_id'] != b_id
+        ]
+        db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
+        st.toast("🗑️ Bloco excluído!", icon="🗑️")
+        limpar_editor_callback()
 
 # ==============================================================================
 # 2. INTERFACE PRINCIPAL
@@ -129,11 +188,11 @@ def toggle_dia(a, m, d):
 tab_cadastro, tab_cronograma = st.tabs(["🛠️ Cadastro & Edição", "📅 Visão Geral"])
 
 with tab_cadastro:
-    # Layout de 3 Colunas: Lista NOTAM | Lista Blocos | Editor Calendário
+    # Layout de 3 Colunas
     col_notam, col_blocos, col_editor = st.columns([1.2, 1.2, 2.5])
 
     # ----------------------------------------------------------------------
-    # COLUNA 1: SELEÇÃO DE NOTAM (Mestre)
+    # COLUNA 1: SELEÇÃO DE NOTAM
     # ----------------------------------------------------------------------
     with col_notam:
         st.subheader("1. NOTAMs")
@@ -156,37 +215,35 @@ with tab_cadastro:
             notam_selecionado = df_critico.iloc[idx]
             id_atual = notam_selecionado['id_notam']
 
+            # Mudança de NOTAM
             if st.session_state.notam_ativo != id_atual:
                 st.session_state.notam_ativo = id_atual
-                limpar_editor()
+                limpar_editor_callback()
                 st.session_state.cache_slots = db_manager.carregar_slots_manuais(id_atual)
                 st.rerun()
 
     # ----------------------------------------------------------------------
-    # COLUNA 2: LISTA DE BLOCOS (O Listbox Editável)
+    # COLUNA 2: LISTA DE BLOCOS
     # ----------------------------------------------------------------------
     with col_blocos:
         st.subheader("2. Blocos")
         
-        # --- CORREÇÃO APLICADA AQUI: if notam_selecionado is not None ---
         if notam_selecionado is None:
             st.info("👈 Selecione um NOTAM.")
         else:
-            # Botão Novo Bloco (Limpar)
-            if st.button("✨ Novo Bloco", use_container_width=True, type="secondary"):
-                limpar_editor()
-                st.rerun()
+            # Botão Novo Bloco (com callback)
+            st.button(
+                "✨ Novo Bloco", 
+                use_container_width=True, 
+                type="secondary",
+                on_click=limpar_editor_callback
+            )
             
             st.markdown("---")
             
             if st.session_state.cache_slots:
-                # Agrupa slots por Block ID para criar os botões
                 df_slots = pd.DataFrame(st.session_state.cache_slots)
-                
-                # Converte para datetime para garantir ordenação e formatação
-                # Trata strings ISO se vierem do banco
                 df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
-                df_slots['end_dt'] = pd.to_datetime(df_slots['end'])
                 
                 # Agrupamento
                 df_blocos = df_slots.groupby('block_id').agg(
@@ -198,61 +255,64 @@ with tab_cadastro:
 
                 st.caption("Clique para Editar:")
                 
-                # Renderiza os botões dos blocos
                 for _, row in df_blocos.iterrows():
                     b_id = row['block_id']
+                    lbl = f"{row['inicio_min'].strftime('%d/%m')} a {row['inicio_max'].strftime('%d/%m')} | ⏰ {row['horario_str']} ({row['qtd']}d)"
                     
-                    # Formata label: "05/01 a 12/01 | 08:00 (3d)"
-                    lbl_data = f"{row['inicio_min'].strftime('%d/%m')} a {row['inicio_max'].strftime('%d/%m')}"
-                    lbl_full = f"{lbl_data} | ⏰ {row['horario_str']} ({row['qtd']}d)"
-                    
-                    # Se este é o bloco em edição, destaca (Primary), senão (Secondary)
                     tipo_btn = "primary" if st.session_state.editing_block_id == b_id else "secondary"
                     
-                    if st.button(lbl_full, key=f"btn_blk_{b_id}", type=tipo_btn, use_container_width=True):
-                        carregar_bloco_para_edicao(b_id)
-                        st.rerun()
+                    # Botão usa callback com args
+                    st.button(
+                        lbl, 
+                        key=f"btn_blk_{b_id}", 
+                        type=tipo_btn, 
+                        use_container_width=True,
+                        on_click=carregar_bloco_callback,
+                        args=(b_id,)
+                    )
             else:
                 st.caption("Nenhum bloco cadastrado.")
 
     # ----------------------------------------------------------------------
-    # COLUNA 3: EDITOR VISUAL (Calendário)
+    # COLUNA 3: EDITOR VISUAL
     # ----------------------------------------------------------------------
     with col_editor:
-        # --- CORREÇÃO APLICADA AQUI TAMBÉM ---
         if notam_selecionado is not None:
-            # Título Contextual
             modo = "✏️ EDITANDO BLOCO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
             st.subheader(f"3. Calendário ({modo})")
             
             with st.container(border=True):
-                # A. Inputs de Controle
+                # A. Inputs (Vinculados ao session_state via KEY)
                 c1, c2, c3, c4 = st.columns(4)
                 
-                # Usa os session_state.ui_... para manter valores ao clicar nos blocos
-                ano_sel = c1.number_input("Ano", 2025, 2030, key="ui_ano")
+                c1.number_input("Ano", 2025, 2030, key="ui_ano")
                 
                 mes_nomes = list(calendar.month_name)[1:]
-                mes_sel_txt = c2.selectbox(
+                
+                # Sincronia Manual do Selectbox
+                # O widget controla apenas a string, mas atualizamos o índice manualmente
+                selected_mes = c2.selectbox(
                     "Mês", 
                     mes_nomes, 
                     index=st.session_state.ui_mes_idx,
-                    key="widget_mes" 
+                    key="ui_mes_txt" # key apenas para UI
                 )
-                # Atualiza o index no state para sincronia
-                st.session_state.ui_mes_idx = mes_nomes.index(mes_sel_txt)
+                # Atualiza o índice real no estado
+                st.session_state.ui_mes_idx = mes_nomes.index(selected_mes)
                 mes_idx = st.session_state.ui_mes_idx + 1
 
-                hora_ini = c3.time_input("Início UTC", key="ui_hora_ini")
-                hora_fim = c4.time_input("Fim UTC", key="ui_hora_fim")
+                c3.time_input("Início UTC", key="ui_hora_ini")
+                c4.time_input("Fim UTC", key="ui_hora_fim")
 
-                if hora_fim < hora_ini:
+                if st.session_state.ui_hora_fim < st.session_state.ui_hora_ini:
                     st.warning("🌙 Slot Noturno (Overnight)")
 
                 st.divider()
 
-                # B. O Calendário de Botões (Toggle)
-                cal_matrix = calendar.monthcalendar(ano_sel, mes_idx)
+                # B. Calendário Toggle
+                ano_atual = st.session_state.ui_ano
+                
+                cal_matrix = calendar.monthcalendar(ano_atual, mes_idx)
                 cols_h = st.columns(7)
                 dias_sem = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"]
                 for i, d in enumerate(dias_sem): 
@@ -262,86 +322,45 @@ with tab_cadastro:
                     cols = st.columns(7)
                     for i, dia in enumerate(semana):
                         if dia != 0:
-                            chave = f"{ano_sel}-{mes_idx:02d}-{dia:02d}"
-                            
-                            # Verifica se está marcado
+                            chave = f"{ano_atual}-{mes_idx:02d}-{dia:02d}"
                             is_selected = chave in st.session_state.dias_selecionados
-                            
-                            # Estilo visual
                             b_type = "primary" if is_selected else "secondary"
-                            label = f"{dia}"
                             
-                            if cols[i].button(label, key=f"cal_{chave}", type=b_type, use_container_width=True):
-                                toggle_dia(ano_sel, mes_idx, dia)
-                                st.rerun()
+                            cols[i].button(
+                                f"{dia}", 
+                                key=f"cal_{chave}", 
+                                type=b_type, 
+                                use_container_width=True,
+                                on_click=toggle_dia_callback,
+                                args=(ano_atual, mes_idx, dia)
+                            )
                         else:
                             cols[i].write("")
 
-            # C. Ações de Salvar / Excluir
+            # C. Ações (Salvar/Excluir) usando Callbacks
             st.write("")
             col_salvar, col_excluir = st.columns([3, 1])
             
             with col_salvar:
                 label_save = "💾 Atualizar Bloco" if st.session_state.editing_block_id else "✅ Criar Bloco"
-                if st.button(label_save, type="primary", use_container_width=True):
-                    if not st.session_state.dias_selecionados:
-                        st.error("Selecione dias no calendário!")
-                    else:
-                        # 1. Define ID do Bloco
-                        if st.session_state.editing_block_id:
-                            # Modo Edição: Mantém ID, remove slots antigos desse bloco da memória
-                            block_id_final = st.session_state.editing_block_id
-                            st.session_state.cache_slots = [
-                                s for s in st.session_state.cache_slots 
-                                if s['block_id'] != block_id_final
-                            ]
-                        else:
-                            # Modo Criação: Novo ID
-                            block_id_final = str(uuid.uuid4())
-
-                        # 2. Gera novos slots
-                        is_overnight = hora_fim < hora_ini
-                        novos_slots = []
-                        
-                        for str_dt in sorted(st.session_state.dias_selecionados):
-                            dt_base = datetime.strptime(str_dt, "%Y-%m-%d")
-                            ini = datetime.combine(dt_base, hora_ini)
-                            fim = datetime.combine(dt_base + timedelta(days=1 if is_overnight else 0), hora_fim)
-                            
-                            novos_slots.append({
-                                "id": str(uuid.uuid4()),
-                                "notam_id": st.session_state.notam_ativo,
-                                "block_id": block_id_final,
-                                "start": ini.isoformat(),
-                                "end": fim.isoformat()
-                            })
-                        
-                        # 3. Atualiza Cache e Salva no Banco
-                        st.session_state.cache_slots.extend(novos_slots)
-                        db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
-                        
-                        st.success("Salvo com sucesso!")
-                        limpar_editor() # Reseta para modo 'Novo'
-                        st.rerun()
+                st.button(
+                    label_save, 
+                    type="primary", 
+                    use_container_width=True,
+                    on_click=salvar_bloco_callback
+                )
 
             with col_excluir:
-                # Só mostra botão excluir se estiver editando
                 if st.session_state.editing_block_id:
-                    if st.button("🗑️ Excluir", type="secondary", use_container_width=True):
-                        # Remove slots do bloco
-                        b_id = st.session_state.editing_block_id
-                        st.session_state.cache_slots = [
-                            s for s in st.session_state.cache_slots 
-                            if s['block_id'] != b_id
-                        ]
-                        # Salva alteração (remoção)
-                        db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
-                        limpar_editor()
-                        st.rerun()
+                    st.button(
+                        "🗑️ Excluir", 
+                        type="secondary", 
+                        use_container_width=True,
+                        on_click=excluir_bloco_callback
+                    )
 
 # --------------------------------------------------------------------------
-# ABA 2: VISÃO GERAL (Tabela Simples)
+# ABA 2: VISÃO GERAL
 # --------------------------------------------------------------------------
 with tab_cronograma:
-    st.info("Aqui será exibido o cronograma consolidado de todos os NOTAMs.")
-    # Implementação futura de Gantt ou Tabela Geral
+    st.info("Aqui será exibido o cronograma consolidado.")
