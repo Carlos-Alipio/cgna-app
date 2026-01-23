@@ -63,13 +63,15 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL (SCANNER MESTRE V18.9)
+# FUNÇÃO PRINCIPAL (SCANNER MESTRE V18.10)
 # ==============================================================================
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    Interpreta o campo D de um NOTAM e gera os slots de tempo (início/fim).
-    V18.9: Refinamento Final para Filtros de Semana Overnight (Caso 16/60)
+    V18.10: A Fusão Final.
+    - Resolve Caso 74 (TUE TIL SAT) com fallback.
+    - Resolve Casos 16/60 (Overnight c/ Barras) com lógica de pares.
+    - Resolve Caso 28 (Bloco Contínuo) com regex dedicado.
     """
     
     # 1. Parse dos Limites Operacionais (B e C)
@@ -97,15 +99,15 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     contexto_ano = dt_b.year
     contexto_mes = dt_b.month
 
-    # 3. Definição dos Regex (Scanner Multicamada)
+    # 3. Definição dos Regex (Scanner Multicamada V18.10)
     
     # R1: Complexo (Dia da Semana + Hora TIL Dia da Semana + Hora)
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
     
-    # R2: Contínuo Data (Hora TIL Dia Hora)
+    # R2: Contínuo Data (Hora TIL Dia Hora) - Vital para Caso 28
     regex_continuous = r'(\d{4})\s+TIL\s+(\d{1,2})\s+(\d{4})'
 
-    # R3: Simples (Hora TIL Hora ou Hora-Hora)
+    # R3: Simples (Hora TIL Hora ou Hora-Hora) - Vital para todos os outros
     regex_simples = r'(\d{4})\s*(?:-|TIL)\s*(\d{4})'
     
     # Compilação Mestra
@@ -127,6 +129,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
         tipo_match = None 
         is_overnight = False
         
+        # Mapeamento dos grupos do regex mestre
         c_dia_ini, c_hora_ini, c_dia_fim, c_hora_fim = g[0], g[1], g[2], g[3]
         cont_hora_ini, cont_dia_fim, cont_hora_fim = g[4], g[5], g[6]
         s_hora_ini, s_hora_fim = g[7], g[8]
@@ -175,15 +178,16 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 # Dias da Semana (MON/TUE)
                 if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
-                    eh_par_consecutivo = False
                     
+                    # Lógica de Pares para Overnight (Caso 16/60)
+                    eh_par_consecutivo = False
                     if len(partes) == 2 and partes[0] in WEEK_MAP and partes[1] in WEEK_MAP:
                         idx0 = WEEK_MAP[partes[0]]
                         idx1 = WEEK_MAP[partes[1]]
                         if idx1 == (idx0 + 1) % 7: eh_par_consecutivo = True
 
                     if is_overnight and eh_par_consecutivo:
-                         # Adiciona apenas o primeiro dia do par overnight
+                         # Adiciona apenas o primeiro dia do par (início da noite)
                          filtro_semana_deste_segmento.add(WEEK_MAP[partes[0]])
                     else:
                         for p in partes:
@@ -199,31 +203,15 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if alvo_tok in WEEK_MAP:
                             idx_alvo = WEEK_MAP[alvo_tok]
                             
-                            # FIX V18.9: Poda de Overnight em Range (MON... TIL THU/FRI)
-                            # Verifica se o alvo faz parte de um par consecutivo
-                            # Olhamos o token original no texto (tokens[k+2])
-                            # Mas precisamos saber se ele veio de um "THU/FRI".
-                            # O tokenizer quebrou "THU/FRI" em "THU", "FRI" se usou split?
-                            # O regex `[A-Za-z0-9/]+` preserva a barra.
-                            # Mas se "THU/FRI" for um token único, ele não entra neste `if tok in WEEK_MAP`.
-                            # Ele entraria no `if "/" in tok`.
-                            
-                            # Portanto, se o alvo é um dia simples (FRI), aplicamos normal.
-                            # Se o range fosse `MON/TUE TIL THU/FRI`, o token alvo seria `THU/FRI`?
-                            # Depende do espaço. Se for `TIL THU/FRI`, tokens[k+2] é `THU/FRI`.
-                            # E `THU/FRI` não está em WEEK_MAP.
-                            # Então o loop principal pegaria `THU/FRI` no bloco de barras.
-                            # O `TIL` seria ignorado?
-                            # Se tokens[k+1] == "TIL" e tokens[k+2] == "THU/FRI".
-                            
-                            # Precisamos tratar `TIL THU/FRI` aqui dentro?
-                            # Se tokens[k+2] tem barra:
-                            if "/" in alvo_tok:
+                            # Tratamento de Range TIL para Overnight
+                            if "/" in alvo_tok: # ex: TIL THU/FRI
                                 subpartes = alvo_tok.split("/")
                                 if subpartes[0] in WEEK_MAP:
+                                    # Se for overnight, o range vai até o primeiro dia do par final
+                                    # Mas o range numérico é inclusivo.
+                                    # MON TIL THU/FRI (Overnight) -> MON, TUE, WED, THU. (FRI é o fim de THU)
+                                    # Então pegamos subpartes[0] (THU) como idx_alvo.
                                     idx_alvo = WEEK_MAP[subpartes[0]]
-                                    # Se for overnight, usamos o primeiro dia do par como fim do range
-                                    # Ex: TIL THU/FRI (Overnight) -> Range vai até THU.
                             
                             if idx_tok <= idx_alvo: filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
                             else: 
@@ -285,7 +273,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         i += 1; continue
                 i += 1
             
-            # Fallback
+            # --- FALLBACK IMPORTANTE (Caso 74) ---
+            # Se temos filtro de semana mas nenhuma data, preenchemos o range total
             if not datas_deste_segmento and filtro_semana_deste_segmento:
                 curr = dt_b
                 while curr <= dt_c + timedelta(days=1): 
@@ -321,6 +310,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_ini_teorico = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
             s_ini = max(s_ini_teorico, dt_b)
             
+            # Lógica para Regex Contínuo (Caso 28)
             if tipo_match == 'continuo':
                 dia_alvo = dia_fim_target
                 mes_fim_calc = dt_final.month
