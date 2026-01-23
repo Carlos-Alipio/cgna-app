@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
+    V18.3 FIX: Correção para TUE TIL SAT (Fallback de datas).
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -192,6 +192,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
+            
+            # --- FIX CRÍTICO: FALLBACK PARA FILTROS DE SEMANA ---
+            # Se achou filtros de semana (TUE TIL SAT) mas não achou datas, preenche tudo entre B e C
+            if not datas_deste_segmento and filtro_semana_deste_segmento:
+                curr = dt_b
+                while curr <= dt_c + timedelta(days=1): # +1 margem
+                    if curr > dt_c: break
+                    datas_deste_segmento.append(curr)
+                    curr += timedelta(days=1)
+            # ----------------------------------------------------
+
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
