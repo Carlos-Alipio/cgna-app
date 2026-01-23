@@ -207,3 +207,69 @@ def limpar_registros_orfaos(lista_ids_ativos):
     """
     # Exemplo SQL: DELETE FROM notam_obras_slots WHERE notam_id NOT IN (lista_ids_ativos)
     pass
+
+import json
+import os
+import pandas as pd
+from datetime import datetime
+
+# Arquivo onde os dados serão salvos
+DB_FILE = "slots_db.json"
+
+def _load_db():
+    """Função interna para ler o JSON do disco"""
+    if not os.path.exists(DB_FILE):
+        return {}
+    try:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Erro ao ler banco: {e}")
+        return {}
+
+def _save_db(data):
+    """Função interna para salvar o JSON no disco"""
+    try:
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Erro ao salvar banco: {e}")
+
+# --- FUNÇÕES PÚBLICAS (As que o app usa) ---
+
+def salvar_slots_manuais(notam_id, slots_lista):
+    """
+    Salva a lista de slots para um ID de NOTAM específico.
+    Sobrescreve o que existia antes para aquele NOTAM.
+    """
+    db = _load_db()
+    db[notam_id] = slots_lista
+    _save_db(db)
+
+def carregar_slots_manuais(notam_id):
+    """
+    Retorna a lista de slots salva. Se não existir, retorna lista vazia.
+    """
+    db = _load_db()
+    return db.get(notam_id, [])
+
+def limpar_registros_orfaos(ids_ativos):
+    """
+    Remove do banco os agendamentos de NOTAMs que não existem mais na lista ativa.
+    """
+    db = _load_db()
+    
+    # Identifica IDs no banco que não estão na lista de ativos
+    ids_no_banco = list(db.keys())
+    alterou = False
+    
+    for n_id in ids_no_banco:
+        if n_id not in ids_ativos:
+            del db[n_id]
+            alterou = True
+            print(f"🧹 Limpeza: Removidos dados do NOTAM órfão {n_id}")
+    
+    if alterou:
+        _save_db(db)
+
+# ... (Mantenha suas outras funções de carregar_notams aqui) ...
