@@ -20,32 +20,44 @@ if 'notam_em_edicao' not in st.session_state: st.session_state.notam_em_edicao =
 if 'slots_temporarios' not in st.session_state: st.session_state.slots_temporarios = []
 
 # ==============================================================================
-# 1. CARREGAMENTO E LIMPEZA (REQUISITO 2: CICLO DE VIDA)
+# 1. CARREGAMENTO E LIMPEZA (CORRIGIDO)
 # ==============================================================================
 df_notams = db_manager.carregar_notams()
 df_config = db_manager.carregar_filtros_configurados()
+
+# Verifica se carregou dados
+if df_notams.empty:
+    st.warning("Banco de dados de NOTAMs vazio.")
+    st.stop()
+
+# --- CORREÇÃO: CRIAÇÃO DO ID ÚNICO ---
+# Se o banco não traz 'id_notam', criamos combinando LOCAL + NUMERO (ex: SBGR_A1234/23)
+if 'id_notam' not in df_notams.columns:
+    # Garante que são strings para evitar erro de concatenação
+    df_notams['loc'] = df_notams['loc'].astype(str)
+    df_notams['n'] = df_notams['n'].astype(str)
+    df_notams['id_notam'] = df_notams['loc'] + "_" + df_notams['n']
 
 # Regras de Filtro
 filtros_assunto = df_config[df_config['tipo'] == 'assunto']['valor'].tolist()
 filtros_condicao = df_config[df_config['tipo'] == 'condicao']['valor'].tolist()
 
-if df_notams.empty:
-    st.warning("Banco de dados de NOTAMs vazio.")
-    st.stop()
-
 # --- LÓGICA DE FILTRAGEM (CRÍTICOS) ---
-# Filtra Frota
+# 1. Filtra Frota
 frota = db_manager.carregar_frota_monitorada()
-df_base = df_notams[df_notams['loc'].isin(frota)] if frota else df_notams
+if frota:
+    df_base = df_notams[df_notams['loc'].isin(frota)]
+else:
+    df_base = df_notams
 
-# Filtra Assunto/Condição
+# 2. Filtra Assunto/Condição
 mask_assunto = df_base['assunto_desc'].isin(filtros_assunto)
 mask_condicao = df_base['condicao_desc'].isin(filtros_condicao)
 df_critico = df_base[mask_assunto & mask_condicao].copy()
 
 # --- LIMPEZA DE ÓRFÃOS ---
-# Garante que cadastros antigos sejam apagados se o NOTAM sumiu
-ids_ativos = df_critico['id_notam'].unique().tolist() # Assumindo que existe uma col ID único
+# Agora 'id_notam' existe, então essa linha não vai mais dar erro
+ids_ativos = df_critico['id_notam'].unique().tolist()
 db_manager.limpar_registros_orfaos(ids_ativos)
 
 # ==============================================================================
