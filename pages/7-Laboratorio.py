@@ -7,7 +7,7 @@ from utils import db_manager
 # Assumindo que sua função de parse está em utils.parser_notam
 # Se estiver em outro lugar, ajuste o import:
 from utils.parser_notam import interpretar_periodo_atividade 
-from utils.casos_reais import CASOS_REAIS
+from utils.casos_reais import CASOS_BLINDADOS
 
 st.set_page_config(page_title="Laboratório de Regressão", layout="wide", page_icon="🧪")
 
@@ -32,9 +32,9 @@ with tab_regressao:
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        total_casos = len(CASOS_REAIS)
+        total_casos = len(CASOS_BLINDADOS)
         
-        for i, caso in enumerate(CASOS_REAIS):
+        for i, caso in enumerate(CASOS_BLINDADOS):
             status_text.text(f"Testando: {caso['id']}...")
             
             # 1. Executa o Parser
