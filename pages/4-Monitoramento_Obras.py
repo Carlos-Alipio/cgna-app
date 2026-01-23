@@ -80,23 +80,19 @@ def limpar_editor_callback():
     """Reseta o editor para o estado 'Novo Bloco'"""
     st.session_state.dias_selecionados = set()
     st.session_state.editing_block_id = None
-    # Reseta horários para padrão, mas mantém mês/ano para conveniência
     st.session_state.ui_hora_ini = time(8, 0)
     st.session_state.ui_hora_fim = time(17, 0)
 
 def carregar_bloco_callback(block_id):
     """Carrega um bloco existente para o editor"""
-    # Filtra os slots desse bloco na memória
     slots_do_bloco = [s for s in st.session_state.cache_slots if s['block_id'] == block_id]
     
     if not slots_do_bloco: return
 
-    # 1. Popula os dias selecionados
     st.session_state.dias_selecionados = set()
     first_slot = None
     
     for s in slots_do_bloco:
-        # Trata string ISO ou datetime
         start_val = s['start']
         if isinstance(start_val, str):
             dt_start = datetime.fromisoformat(start_val)
@@ -106,7 +102,6 @@ def carregar_bloco_callback(block_id):
         st.session_state.dias_selecionados.add(dt_start.strftime("%Y-%m-%d"))
         if first_slot is None: first_slot = s
 
-    # 2. Popula os widgets de tempo e calendário
     if isinstance(first_slot['start'], str):
         dt_ref = datetime.fromisoformat(first_slot['start'])
         dt_end_ref = datetime.fromisoformat(first_slot['end'])
@@ -119,7 +114,6 @@ def carregar_bloco_callback(block_id):
     st.session_state.ui_hora_ini = dt_ref.time()
     st.session_state.ui_hora_fim = dt_end_ref.time()
     
-    # 3. Define ID de edição
     st.session_state.editing_block_id = block_id
 
 def toggle_dia_callback(a, m, d):
@@ -136,15 +130,12 @@ def salvar_bloco_callback():
         st.toast("⚠️ Selecione dias no calendário!", icon="⚠️")
         return
 
-    # Pega valores atuais dos widgets
     h_ini = st.session_state.ui_hora_ini
     h_fim = st.session_state.ui_hora_fim
     is_overnight = h_fim < h_ini
     
-    # Define ID do Bloco (Mantém se editando, cria novo se criando)
     if st.session_state.editing_block_id:
         block_id_final = st.session_state.editing_block_id
-        # Remove versão antiga do cache
         st.session_state.cache_slots = [
             s for s in st.session_state.cache_slots 
             if s['block_id'] != block_id_final
@@ -152,7 +143,6 @@ def salvar_bloco_callback():
     else:
         block_id_final = str(uuid.uuid4())
 
-    # Gera a lista de slots (JSON)
     novos_slots = []
     for str_dt in sorted(st.session_state.dias_selecionados):
         dt_base = datetime.strptime(str_dt, "%Y-%m-%d")
@@ -167,10 +157,8 @@ def salvar_bloco_callback():
             "end": fim.isoformat()
         })
     
-    # Atualiza Cache Local e Salva no Disco
     st.session_state.cache_slots.extend(novos_slots)
     db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
-    
     st.toast("✅ Bloco salvo com sucesso!", icon="💾")
     limpar_editor_callback()
 
@@ -178,12 +166,10 @@ def excluir_bloco_callback():
     """Exclui o bloco atual"""
     if st.session_state.editing_block_id:
         b_id = st.session_state.editing_block_id
-        # Remove do cache
         st.session_state.cache_slots = [
             s for s in st.session_state.cache_slots 
             if s['block_id'] != b_id
         ]
-        # Salva no disco
         db_manager.salvar_slots_manuais(st.session_state.notam_ativo, st.session_state.cache_slots)
         st.toast("🗑️ Bloco excluído!", icon="🗑️")
         limpar_editor_callback()
@@ -195,18 +181,15 @@ def excluir_bloco_callback():
 tab_cadastro, tab_cronograma = st.tabs(["🛠️ Cadastro & Edição", "📅 Visão Geral"])
 
 with tab_cadastro:
-    # Layout de 3 Colunas: Mestre (NOTAM) -> Detalhe (Blocos) -> Editor
+    # --- ÁREA SUPERIOR: EDITOR E BLOCOS ---
     col_notam, col_blocos, col_editor = st.columns([1.2, 1.2, 2.5])
 
-    # ----------------------------------------------------------------------
     # COLUNA 1: SELEÇÃO DE NOTAM
-    # ----------------------------------------------------------------------
     with col_notam:
         st.subheader("1. NOTAMs")
         df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy()
         df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
         
-        # Tabela Selecionável
         event = st.dataframe(
             df_sel[['Rotulo', 'assunto_desc']],
             column_config={"Rotulo": "Ref", "assunto_desc": "Obra"},
@@ -223,40 +206,27 @@ with tab_cadastro:
             notam_selecionado = df_critico.iloc[idx]
             id_atual = notam_selecionado['id_notam']
 
-            # Lógica de Troca de NOTAM
             if st.session_state.notam_ativo != id_atual:
                 st.session_state.notam_ativo = id_atual
-                limpar_editor_callback() # Limpa visual
-                # Carrega dados reais do JSON
+                limpar_editor_callback() 
                 st.session_state.cache_slots = db_manager.carregar_slots_manuais(id_atual)
                 st.rerun()
 
-    # ----------------------------------------------------------------------
     # COLUNA 2: LISTA DE BLOCOS
-    # ----------------------------------------------------------------------
     with col_blocos:
         st.subheader("2. Blocos")
         
         if notam_selecionado is None:
             st.info("👈 Selecione um NOTAM.")
         else:
-            # Botão Novo Bloco (com callback)
-            st.button(
-                "✨ Novo Bloco", 
-                use_container_width=True, 
-                type="secondary",
-                on_click=limpar_editor_callback
-            )
-            
+            st.button("✨ Novo Bloco", use_container_width=True, type="secondary", on_click=limpar_editor_callback)
             st.markdown("---")
             
             if st.session_state.cache_slots:
-                # Prepara dados para exibição agrupada
                 df_slots = pd.DataFrame(st.session_state.cache_slots)
                 df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
                 df_slots['end_dt'] = pd.to_datetime(df_slots['end'])
                 
-                # Agrupa por block_id
                 df_blocos = df_slots.groupby('block_id').agg(
                     inicio_min=('start_dt', 'min'),
                     inicio_max=('start_dt', 'max'),
@@ -267,54 +237,35 @@ with tab_cadastro:
 
                 st.caption("Clique para Editar:")
                 
-                # Renderiza botões de blocos
                 for _, row in df_blocos.iterrows():
                     b_id = row['block_id']
                     
-                    # --- FORMATAÇÃO PERSONALIZADA (LOCAL - NUM - DATA - HORA) ---
+                    # Formatação Personalizada (Local - Num - Data - Hora)
                     loc = notam_selecionado['loc']
                     num = notam_selecionado['n']
                     dias = f"{row['inicio_min'].strftime('%d/%m')} a {row['inicio_max'].strftime('%d/%m')}"
                     horas = f"{row['h_ini']} - {row['h_fim']}"
-                    
                     lbl = f"{loc}-{num} | {dias} | ⏰ {horas}"
                     
-                    # Destaque visual
                     tipo_btn = "primary" if st.session_state.editing_block_id == b_id else "secondary"
                     
-                    st.button(
-                        lbl, 
-                        key=f"btn_blk_{b_id}", 
-                        type=tipo_btn, 
-                        use_container_width=True,
-                        on_click=carregar_bloco_callback,
-                        args=(b_id,)
-                    )
+                    st.button(lbl, key=f"btn_blk_{b_id}", type=tipo_btn, use_container_width=True, on_click=carregar_bloco_callback, args=(b_id,))
             else:
                 st.caption("Nenhum bloco cadastrado.")
 
-    # ----------------------------------------------------------------------
     # COLUNA 3: EDITOR VISUAL
-    # ----------------------------------------------------------------------
     with col_editor:
         if notam_selecionado is not None:
             modo = "✏️ EDITANDO BLOCO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
             st.subheader(f"3. Calendário ({modo})")
             
             with st.container(border=True):
-                # A. Inputs (Vinculados ao session_state via KEY)
                 c1, c2, c3, c4 = st.columns(4)
                 
                 c1.number_input("Ano", 2025, 2030, key="ui_ano")
                 
                 mes_nomes = list(calendar.month_name)[1:]
-                # Selectbox controla apenas o índice visual, lógica usa session_state
-                sel_mes = c2.selectbox(
-                    "Mês", 
-                    mes_nomes, 
-                    index=st.session_state.ui_mes_idx,
-                    key="widget_mes" 
-                )
+                sel_mes = c2.selectbox("Mês", mes_nomes, index=st.session_state.ui_mes_idx, key="widget_mes")
                 st.session_state.ui_mes_idx = mes_nomes.index(sel_mes)
                 mes_idx = st.session_state.ui_mes_idx + 1
 
@@ -326,17 +277,12 @@ with tab_cadastro:
 
                 st.divider()
 
-                # B. Grade de Calendário (Toggle Buttons)
                 ano_atual = st.session_state.ui_ano
                 cal_matrix = calendar.monthcalendar(ano_atual, mes_idx)
-                
-                # Cabeçalho Dias
                 cols_h = st.columns(7)
                 dias_sem = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"]
-                for i, d in enumerate(dias_sem): 
-                    cols_h[i].markdown(f"<div style='text-align:center; color: #888; font-size: 0.8rem'>{d}</div>", unsafe_allow_html=True)
+                for i, d in enumerate(dias_sem): cols_h[i].markdown(f"<div style='text-align:center; color: #888; font-size: 0.8rem'>{d}</div>", unsafe_allow_html=True)
 
-                # Dias
                 for semana in cal_matrix:
                     cols = st.columns(7)
                     for i, dia in enumerate(semana):
@@ -344,42 +290,69 @@ with tab_cadastro:
                             chave = f"{ano_atual}-{mes_idx:02d}-{dia:02d}"
                             is_selected = chave in st.session_state.dias_selecionados
                             b_type = "primary" if is_selected else "secondary"
-                            
-                            cols[i].button(
-                                f"{dia}", 
-                                key=f"cal_{chave}", 
-                                type=b_type, 
-                                use_container_width=True,
-                                on_click=toggle_dia_callback,
-                                args=(ano_atual, mes_idx, dia)
-                            )
+                            cols[i].button(f"{dia}", key=f"cal_{chave}", type=b_type, use_container_width=True, on_click=toggle_dia_callback, args=(ano_atual, mes_idx, dia))
                         else:
                             cols[i].write("")
 
-            # C. Ações (Salvar / Excluir)
-            st.write("")
             col_save, col_del = st.columns([3, 1])
-            
             with col_save:
                 lbl_save = "💾 Atualizar Bloco" if st.session_state.editing_block_id else "✅ Criar Bloco"
-                st.button(
-                    lbl_save, 
-                    type="primary", 
-                    use_container_width=True, 
-                    on_click=salvar_bloco_callback
-                )
+                st.button(lbl_save, type="primary", use_container_width=True, on_click=salvar_bloco_callback)
 
             with col_del:
                 if st.session_state.editing_block_id:
-                    st.button(
-                        "🗑️ Excluir", 
-                        type="secondary", 
-                        use_container_width=True, 
-                        on_click=excluir_bloco_callback
-                    )
+                    st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
+
+    # --- ÁREA INFERIOR: TABELA DE ANÁLISE (LISTBOX SOLICITADO) ---
+    st.divider()
+    st.subheader("4. Análise Detalhada dos Slots Cadastrados")
+    
+    if st.session_state.cache_slots:
+        # Prepara tabela de análise
+        df_analise = pd.DataFrame(st.session_state.cache_slots)
+        df_analise['start_dt'] = pd.to_datetime(df_analise['start'])
+        df_analise['end_dt'] = pd.to_datetime(df_analise['end'])
+        
+        # Cria colunas amigáveis
+        df_analise['Data Início'] = df_analise['start_dt'].dt.strftime('%d/%m/%Y')
+        df_analise['Hora Início'] = df_analise['start_dt'].dt.strftime('%H:%M')
+        df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
+        df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
+        df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').replace('Monday','SEG').replace('Tuesday','TER').replace('Wednesday','QUA').replace('Thursday','QUI').replace('Friday','SEX').replace('Saturday','SÁB').replace('Sunday','DOM')
+        
+        # Ordena cronologicamente
+        df_analise = df_analise.sort_values('start_dt')
+        
+        # Exibe Dataframe (ListBox)
+        st.dataframe(
+            df_analise[['Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Dia Semana']],
+            use_container_width=True,
+            hide_index=True,
+            height=300
+        )
+    else:
+        st.info("Nenhum slot cadastrado para análise.")
 
 # --------------------------------------------------------------------------
-# ABA 2: VISÃO GERAL
+# ABA 2: VISÃO GERAL (TABELA CONSOLIDADA)
 # --------------------------------------------------------------------------
 with tab_cronograma:
-    st.info("Visão consolidada do cronograma (Em breve).")
+    if st.session_state.cache_slots:
+        st.info("Visão somente leitura dos slots cadastrados.")
+        # Reutiliza o dataframe preparado acima
+        df_view = pd.DataFrame(st.session_state.cache_slots)
+        df_view['start'] = pd.to_datetime(df_view['start'])
+        df_view['end'] = pd.to_datetime(df_view['end'])
+        df_view = df_view.sort_values('start')
+        
+        st.dataframe(
+            df_view[['start', 'end']],
+            column_config={
+                "start": st.column_config.DatetimeColumn("Início", format="DD/MM/YYYY HH:mm"),
+                "end": st.column_config.DatetimeColumn("Fim", format="DD/MM/YYYY HH:mm")
+            },
+            use_container_width=True,
+            height=600
+        )
+    else:
+        st.warning("Selecione um NOTAM e cadastre horários para visualizar o cronograma.")
