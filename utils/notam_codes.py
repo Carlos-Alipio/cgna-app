@@ -304,5 +304,8 @@ NOTAM_CONDITION = {
     'LX': 'Operando, mas com cautela devido a',
 
     # --- OUTROS (X) ---
-    'XX': 'Linguagem clara'
+    'XX': 'Linguagem clara',
+
+    # --- NOTAM INICIADOR (TT) ---
+    'TT': 'NOTAM iniciador'
 }
