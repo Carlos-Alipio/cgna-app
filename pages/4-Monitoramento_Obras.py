@@ -20,6 +20,10 @@ st.markdown("""
     .stButton button {
         min-height: 45px;
     }
+    /* Destaque para bloco ativo */
+    .bloco-ativo {
+        border: 2px solid #7C3AED !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -194,7 +198,9 @@ with tab_cadastro:
     # Layout de 3 Colunas: Mestre (NOTAM) -> Detalhe (Blocos) -> Editor
     col_notam, col_blocos, col_editor = st.columns([1.2, 1.2, 2.5])
 
-    # --- COLUNA 1: SELEÇÃO DE NOTAM ---
+    # ----------------------------------------------------------------------
+    # COLUNA 1: SELEÇÃO DE NOTAM
+    # ----------------------------------------------------------------------
     with col_notam:
         st.subheader("1. NOTAMs")
         df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy()
@@ -225,27 +231,37 @@ with tab_cadastro:
                 st.session_state.cache_slots = db_manager.carregar_slots_manuais(id_atual)
                 st.rerun()
 
-    # --- COLUNA 2: LISTA DE BLOCOS ---
+    # ----------------------------------------------------------------------
+    # COLUNA 2: LISTA DE BLOCOS
+    # ----------------------------------------------------------------------
     with col_blocos:
         st.subheader("2. Blocos")
         
         if notam_selecionado is None:
             st.info("👈 Selecione um NOTAM.")
         else:
-            # Botão Novo Bloco
-            st.button("✨ Novo Bloco", use_container_width=True, type="secondary", on_click=limpar_editor_callback)
+            # Botão Novo Bloco (com callback)
+            st.button(
+                "✨ Novo Bloco", 
+                use_container_width=True, 
+                type="secondary",
+                on_click=limpar_editor_callback
+            )
+            
             st.markdown("---")
             
             if st.session_state.cache_slots:
                 # Prepara dados para exibição agrupada
                 df_slots = pd.DataFrame(st.session_state.cache_slots)
                 df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
+                df_slots['end_dt'] = pd.to_datetime(df_slots['end'])
                 
                 # Agrupa por block_id
                 df_blocos = df_slots.groupby('block_id').agg(
                     inicio_min=('start_dt', 'min'),
                     inicio_max=('start_dt', 'max'),
-                    horario_str=('start_dt', lambda x: x.iloc[0].strftime('%H:%M')),
+                    h_ini=('start_dt', lambda x: x.iloc[0].strftime('%H:%M')),
+                    h_fim=('end_dt', lambda x: x.iloc[0].strftime('%H:%M')),
                     qtd=('id', 'count')
                 ).reset_index().sort_values('inicio_min')
 
@@ -254,9 +270,16 @@ with tab_cadastro:
                 # Renderiza botões de blocos
                 for _, row in df_blocos.iterrows():
                     b_id = row['block_id']
-                    lbl = f"{row['inicio_min'].strftime('%d/%m')} a {row['inicio_max'].strftime('%d/%m')} | ⏰ {row['horario_str']} ({row['qtd']}d)"
                     
-                    # Destaque visual se estiver editando este bloco
+                    # --- FORMATAÇÃO PERSONALIZADA (LOCAL - NUM - DATA - HORA) ---
+                    loc = notam_selecionado['loc']
+                    num = notam_selecionado['n']
+                    dias = f"{row['inicio_min'].strftime('%d/%m')} a {row['inicio_max'].strftime('%d/%m')}"
+                    horas = f"{row['h_ini']} - {row['h_fim']}"
+                    
+                    lbl = f"{loc}-{num} | {dias} | ⏰ {horas}"
+                    
+                    # Destaque visual
                     tipo_btn = "primary" if st.session_state.editing_block_id == b_id else "secondary"
                     
                     st.button(
@@ -270,14 +293,16 @@ with tab_cadastro:
             else:
                 st.caption("Nenhum bloco cadastrado.")
 
-    # --- COLUNA 3: EDITOR VISUAL ---
+    # ----------------------------------------------------------------------
+    # COLUNA 3: EDITOR VISUAL
+    # ----------------------------------------------------------------------
     with col_editor:
         if notam_selecionado is not None:
             modo = "✏️ EDITANDO BLOCO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
             st.subheader(f"3. Calendário ({modo})")
             
             with st.container(border=True):
-                # A. Controles (Ano, Mês, Hora)
+                # A. Inputs (Vinculados ao session_state via KEY)
                 c1, c2, c3, c4 = st.columns(4)
                 
                 c1.number_input("Ano", 2025, 2030, key="ui_ano")
@@ -337,11 +362,21 @@ with tab_cadastro:
             
             with col_save:
                 lbl_save = "💾 Atualizar Bloco" if st.session_state.editing_block_id else "✅ Criar Bloco"
-                st.button(lbl_save, type="primary", use_container_width=True, on_click=salvar_bloco_callback)
+                st.button(
+                    lbl_save, 
+                    type="primary", 
+                    use_container_width=True, 
+                    on_click=salvar_bloco_callback
+                )
 
             with col_del:
                 if st.session_state.editing_block_id:
-                    st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
+                    st.button(
+                        "🗑️ Excluir", 
+                        type="secondary", 
+                        use_container_width=True, 
+                        on_click=excluir_bloco_callback
+                    )
 
 # --------------------------------------------------------------------------
 # ABA 2: VISÃO GERAL
