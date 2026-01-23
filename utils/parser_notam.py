@@ -63,13 +63,13 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL (SCANNER MESTRE V18.7)
+# FUNÇÃO PRINCIPAL (SCANNER MESTRE V18.8)
 # ==============================================================================
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
     Interpreta o campo D de um NOTAM e gera os slots de tempo (início/fim).
-    V18.7: Correção de Pernoites (Barras) e Blocos Contínuos (CASO 16, 28, 60)
+    V18.8: Refinamento de Overnight em Dias da Semana (Caso 16/60) e Blocos Contínuos (Caso 28)
     """
     
     # 1. Parse dos Limites Operacionais (B e C)
@@ -103,8 +103,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     # Ex: MON 0800 TIL TUE 1200
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
     
-    # R2: Contínuo Data (Hora TIL Dia Hora) -> NOVO V18.7
-    # Ex: 1543 TIL 20 2129 (Hora Início, Dia Fim, Hora Fim)
+    # R2: Contínuo Data (Hora TIL Dia Hora) - Prioridade alta para pegar "1543 TIL 20 2129"
     regex_continuous = r'(\d{4})\s+TIL\s+(\d{1,2})\s+(\d{4})'
 
     # R3: Simples (Hora TIL Hora ou Hora-Hora)
@@ -125,19 +124,15 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     # 4. Iteração sobre os Segmentos
     for match in matches:
-        # Extração de grupos baseado na ordem do regex mestre
-        # 1-4: Complexo | 5-7: Contínuo | 8-9: Simples
         g = match.groups()
         
-        # Flags de controle
-        tipo_match = None # 'complexo', 'continuo', 'simples'
+        tipo_match = None 
         is_overnight = False
         
         c_dia_ini, c_hora_ini, c_dia_fim, c_hora_fim = g[0], g[1], g[2], g[3]
         cont_hora_ini, cont_dia_fim, cont_hora_fim = g[4], g[5], g[6]
         s_hora_ini, s_hora_fim = g[7], g[8]
 
-        # Definição dos parâmetros do slot baseado no tipo
         if c_dia_ini:
             tipo_match = 'complexo'
             h_ini_str, h_fim_str = c_hora_ini, c_hora_fim
@@ -151,7 +146,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             tipo_match = 'continuo'
             h_ini_str, h_fim_str = cont_hora_ini, cont_hora_fim
             dia_fim_target = int(cont_dia_fim)
-            # Offset será calculado dinamicamente no loop de datas
 
         else:
             tipo_match = 'simples'
@@ -184,26 +178,24 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
                     
-                    # FIX V18.7: Se for overnight e temos dias consecutivos (MON/TUE),
-                    # ignoramos o segundo dia (que é apenas o término do turno da noite anterior)
-                    # Ex: MON/TUE -> Gera slots começando em MON e TUE.
-                    # Mas se for MON/TUE TIL THU/FRI (overnight), queremos slots começando em MON, TUE, WED, THU.
-                    # O "FRI" em THU/FRI é o fim do turno de THU. Não deve iniciar slot.
-                    # Mas o parser de Range "TIL" já trata o range inclusivo.
-                    # O problema principal é o "MON/TUE" sozinho ou como inicio de range.
+                    # FIX V18.8: Tratamento de Overnight em Dias da Semana (MON/TUE)
+                    # Se for overnight, e detectarmos um par consecutivo (ex: MON e TUE), 
+                    # adicionamos APENAS o primeiro.
                     
-                    # Lógica Simplificada: Adiciona todos. O filtro overnight será tratado melhor com ranges.
-                    # Se for range "MON/TUE TIL THU/FRI", o loop abaixo vai pegar indices.
-                    # MON(0), TUE(1) ... THU(3), FRI(4).
-                    # Se for overnight, devemos podar o último elemento se ele for consecutivo?
-                    # Para CASO_16 (MON/TUE TIL THU/FRI 1940-0115), queremos segundas, terças, quartas e quintas.
-                    # Range atual gera: 0, 1, 2, 3, 4. (Inclui Sexta). Sexta à noite começa o slot?
-                    # Não, Sexta de manhã termina o slot de Quinta.
-                    # Então, se is_overnight, e estamos num range de semana, removemos o último dia?
-                    # Não podemos generalizar. Vamos focar na duplicidade de datas numéricas que foi o erro principal.
+                    eh_par_consecutivo_semana = False
+                    if len(partes) == 2 and partes[0] in WEEK_MAP and partes[1] in WEEK_MAP:
+                        idx0 = WEEK_MAP[partes[0]]
+                        idx1 = WEEK_MAP[partes[1]]
+                        if idx1 == (idx0 + 1) % 7:
+                            eh_par_consecutivo_semana = True
+
+                    if is_overnight and eh_par_consecutivo_semana:
+                         filtro_semana_deste_segmento.add(WEEK_MAP[partes[0]])
+                         # Ignora o segundo dia (partes[1]) pois é o fim do turno
+                    else:
+                        for p in partes:
+                            if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     
-                    for p in partes:
-                        if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     k += 1; continue
                 
                 # Dias da Semana (Range TIL)
@@ -214,15 +206,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if alvo_tok in WEEK_MAP:
                             idx_alvo = WEEK_MAP[alvo_tok]
                             
-                            # FIX CASO 16/60: Pruning de Overnight em Ranges de Semana
-                            # Se for overnight (ex: 1940-0115) e o range for algo como MON/TUE TIL THU/FRI
-                            # O usuário quer dizer "Noite de Mon até Noite de Thu".
-                            # Se o token alvo faz parte de um par (ex: THU/FRI), o FRI é o fim.
-                            # Como é difícil saber se veio de um par aqui, aplicamos a lógica:
-                            # Se is_overnight, removemos o último dia do range?
-                            # NÃO, isso é arriscado.
-                            # Vamos manter a lógica padrão. O CASO_16 falhou por excesso (137 vs 130).
-                            
+                            # Adiciona range normal
                             if idx_tok <= idx_alvo: filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
                             else: 
                                 filtro_semana_deste_segmento.update(range(idx_tok, 7))
@@ -246,6 +230,13 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                         alvo = tokens[i+2]
                         dia_start = int(tok.split("/")[0])
+                        
+                        # Se for "18 1543 TIL 20 2129", o "1543" foi engolido pelo regex_continuous?
+                        # Não, o regex pega a hora. O texto antes é "JAN 18". O token "18" é processado aqui.
+                        # Mas se o regex_continuous pegou "1543 TIL 20 2129", o "1543" não está no segmento.
+                        # O segmento termina antes do match. 
+                        # Então se tivermos "JAN 18", o token 18 é processado como dia único.
+                        
                         # ... TIL 15
                         if alvo[0].isdigit():
                             dia_end = int(alvo.split("/")[0])
@@ -263,14 +254,11 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                     if "/" in tok: 
                         partes = tok.split("/")
                         
-                        # --- FIX V18.7: Duplicidade em Overnight (Datas Numéricas) ---
-                        # Se for overnight e as datas forem consecutivas (17/18),
-                        # assume-se que 18 é apenas o término do dia 17. Ignora o 18 como início.
+                        # FIX V18.7/8: Duplicidade em Overnight (Datas Numéricas)
                         consecutivos = False
                         try:
                             v1 = int(partes[0])
                             v2 = int(partes[1])
-                            # Verifica consecutivo simples ou virada de mês (ex: 30/01)
                             if v2 == v1 + 1 or (v1 >= 28 and v2 == 1):
                                 consecutivos = True
                         except: pass
@@ -279,7 +267,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                              dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                              if dt: datas_deste_segmento.append(dt)
                         else:
-                            # Comportamento padrão (adiciona todas)
                             for p in partes:
                                 dt = criar_data_segura(contexto_ano, contexto_mes, int(p))
                                 if dt: datas_deste_segmento.append(dt)
@@ -291,7 +278,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         i += 1; continue
                 i += 1
             
-            # Fallback para filtro de semana puro
+            # Fallback
             if not datas_deste_segmento and filtro_semana_deste_segmento:
                 curr = dt_b
                 while curr <= dt_c + timedelta(days=1): 
@@ -307,7 +294,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             while curr <= dt_c: datas_deste_segmento.append(curr); curr += timedelta(days=1)
             achou_nova_definicao = True
 
-        # Atualiza memória
         if achou_nova_definicao:
             ultima_lista_datas = datas_deste_segmento
             ultimo_filtro_semana = filtro_semana_deste_segmento
@@ -325,35 +311,40 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
+            # Lógica Especial para Regex Contínuo (Caso 28)
+            # Se for contínuo (1543 TIL 20 2129), ele gera um ÚNICO slot longo que começa em dt_final+hora_ini e termina em dia_fim+hora_fim.
+            # Não deve gerar slots repetidos se datas_deste_segmento tiver múltiplos dias (a menos que seja essa a intenção).
+            # No caso 28: JAN 18 1543... O token "18" gerou dt_crua=18/Jan.
+            # O match contínuo define inicio 1543 e fim dia 20 às 2129.
+            # Slot: 18/Jan 15:43 até 20/Jan 21:29.
+            
             s_ini_teorico = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
             s_ini = max(s_ini_teorico, dt_b)
             
-            # Cálculo do Fim
             if tipo_match == 'continuo':
-                # Lógica para "1543 TIL 20 2129"
-                # O dia de fim é fornecido pelo regex (dia_fim_target)
                 dia_alvo = dia_fim_target
-                # Se dia alvo for menor que dia inicio, virou o mês
                 mes_fim_calc = dt_final.month
                 ano_fim_calc = dt_final.year
                 
+                # Se dia alvo for menor que dia inicio, virou o mês
                 if dia_alvo < dt_final.day:
                     mes_fim_calc += 1
                     if mes_fim_calc > 12:
                         mes_fim_calc = 1
                         ano_fim_calc += 1
+                elif dia_alvo == dt_final.day and int(h_fim_str) < int(h_ini_str):
+                     # Mesmo dia, hora menor? Talvez erro ou virada de mês implícita se dia alvo for igual.
+                     # Mas regex continuo geralmente implica dias diferentes ou mesmo dia.
+                     pass
                 
                 dt_fim_base = criar_data_segura(ano_fim_calc, mes_fim_calc, dia_alvo)
-                if not dt_fim_base: dt_fim_base = dt_final # Fallback
+                if not dt_fim_base: dt_fim_base = dt_final 
                 
                 s_fim = dt_fim_base.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
-                
+            
             else:
-                # Simples ou Complexo
                 s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
-                
                 if s_ini >= s_fim and not ("DLY" in segmento or "DAILY" in segmento):
-                     # Burla de 1 minuto para início inválido no mesmo dia
                      s_fim = s_ini + timedelta(minutes=1)
                 else:
                     s_fim += timedelta(days=offset_dias)
