@@ -1,5 +1,6 @@
 # notam_codes.py
-# Revisado conforme Tabela DECEA TCA 53-1 (Arquivos Excel anexados)
+# Baseado na Tabela DECEA TCA 53-1 e normas ICAO
+# Revisado conforme especificações do usuário
 
 # ---------------------------------------------------------
 # 2ª e 3ª Letras - ASSUNTO (O que está sendo notificado?)
@@ -10,24 +11,24 @@ NOTAM_SUBJECT = {
     'LB': 'Farol de aeródromo',
     'LC': 'Luzes de eixo de pista',
     'LD': 'Iluminação do indicador de direção de pouso',
-    'LE': 'Luzes laterais de pista',
-    'LF': 'Luzes de lampejos sequenciais',
+    'LE': 'Luzeslaterais de pista',
+    'LF': 'Luzes de lampejossequenciais',
     'LG': 'Iluminação controlada pelo piloto',
     'LH': 'Luzes de pista de alta intensidade',
-    'LI': 'Luzes identificadoras de fim de pista',
-    'LJ': 'Luzes identificadoras de alinhamento de pista',
+    'LI': 'Luzesidentificadoras de fim de pista',
+    'LJ': 'Luzesidentificadoras de alinhamento de pista',
     'LK': 'Componentes do sistema de luzes de aproximação categoria II',
     'LL': 'Luzes de pista de baixa intensidade',
     'LM': 'Luzes de pista de média intensidade',
     'LP': 'Sistema indicador de trajetória de aproximação de precisão',
-    'LR': 'Todas as instalações de iluminação da área de pouso',
+    'LR': 'Todas asinstalações de iluminação da área de pouso',
     'LS': 'Luzes de zona de parada',
     'LT': 'Luzes de cabeceira',
     'LU': 'Indicador visual da trajetória de aproximação de helicóptero',
     'LV': 'Sistema indicador da rampa de aproximação visual',
     'LW': 'Iluminação de heliporto',
     'LX': 'Luzes de eixo de pista de táxi',
-    'LY': 'Luzes laterais de pista de táxi',
+    'LY': 'Luzeslaterais de pista de táxi',
     'LZ': 'Luzes de zona de toque',
 
     # --- AGA (AERÓDROMOS) - MOVIMENTO E POUSO (M) ---
@@ -46,7 +47,7 @@ NOTAM_SUBJECT = {
     'MS': 'Zona de parada',
     'MT': 'Cabeceira',
     'MU': 'Área de giro',
-    'MW': 'Faixa de pista/margem de pista',
+    'MW': 'Faixa de pista/margem da pista',
     'MX': 'Pista(s) de táxi',
     'MY': 'Pista de táxi de saída rápida',
 
@@ -58,9 +59,9 @@ NOTAM_SUBJECT = {
     'FE': 'Oxigênio',
     'FF': 'Combate de incêndio e salvamento',
     'FG': 'Controle de movimento no solo',
-    'FH': 'Área de desembarque de helicóptero',
+    'FH': 'Área de desembarque de Helicóptero/plataforma',
     'FI': 'Degelo de aeronaves',
-    'FJ': 'Óleos/Lubrificantes',
+    'FJ': 'Lubrificante(s)',
     'FL': 'Indicador de direção de pouso',
     'FM': 'Serviço meteorológico',
     'FO': 'Sistema de dispersão de nevoeiro',
@@ -69,7 +70,7 @@ NOTAM_SUBJECT = {
     'FT': 'Transmissômetro',
     'FU': 'Disponibilidade de combustível',
     'FW': 'Indicador de direção do vento',
-    'FZ': 'Alfândega/Imigração',
+    'FZ': 'Alfândega/imigração',
 
     # --- ATM (TRÁFEGO AÉREO) - ORGANIZAÇÃO DO ESPAÇO (A) ---
     'AA': 'Altitude mínima',
@@ -77,12 +78,12 @@ NOTAM_SUBJECT = {
     'AD': 'Zona de identificação de defesa aérea',
     'AE': 'Área de controle',
     'AF': 'Região de informação de voo',
-    'AH': 'Área de controle superior',
+    'AH': 'Área de controle do espaço aéreo superior',
     'AL': 'Nível de voo mínimo utilizável',
     'AN': 'Rota de navegação de área',
     'AO': 'Área de controle oceânico',
     'AP': 'Ponto de notificação',
-    'AR': 'Rota ATS',
+    'AR': 'Rota de serviços de tráfego aéreo',
     'AT': 'Área de controle terminal',
     'AU': 'Região superior de informação de voo',
     'AV': 'Área de assessoramento superior',
@@ -90,8 +91,8 @@ NOTAM_SUBJECT = {
     'AZ': 'Zona de tráfego de aeródromo',
 
     # --- ATM (TRÁFEGO AÉREO) - SERVIÇOS (S) ---
-    'SA': 'Serviço automático de informação de terminal',
-    'SB': 'Sala AIS ( ATS Reporting Office)',
+    'SA': 'Serviço automático de informação em terminal',
+    'SB': 'Centro de notificação dosserviços de tráfego aéreo',
     'SC': 'Centro de controle de área',
     'SE': 'Serviço de informação de voo',
     'SF': 'Serviço de informação de voo de aeródromo',
@@ -101,70 +102,70 @@ NOTAM_SUBJECT = {
     'SS': 'Estação de serviço de voo',
     'ST': 'Torre de controle de aeródromo',
     'SU': 'Centro de controle de área superior',
-    'SV': 'VOLMET',
+    'SV': 'Rádio de informação meteorológica para aeronave em voo',
     'SY': 'Serviço de assessoramento de área superior',
 
     # --- ATM (TRÁFEGO AÉREO) - PROCEDIMENTOS (P) ---
     'PA': 'Chegada padrão por instrumentos',
-    'PB': 'Chegada padrão visual',
+    'PB': 'Chegada padrão porregras de voo visual',
     'PC': 'Procedimentos de contingência',
     'PD': 'Saída padrão por instrumentos',
-    'PE': 'Saída padrão visual',
+    'PE': 'Saída padrão porregras de voo visual',
     'PF': 'Procedimento de controle de fluxo',
     'PH': 'Procedimento de espera',
     'PI': 'Procedimento de aproximação por instrumentos',
-    'PK': 'Procedimento de aproximação visual',
-    'PL': 'Plano de voo',
+    'PK': 'Procedimentos de aproximação por regras de voo visual',
+    'PL': 'Processamento e preenchimento de plano de voo e contingência relacionada',
     'PM': 'Mínimos de operação no aeródromo',
     'PN': 'Restrições operacionais de ruído',
-    'PO': 'Altitude/Altura livre de obstáculos',
+    'PO': 'Altitude e altura livre de obstáculo',
     'PR': 'Procedimento de falha de rádio',
     'PT': 'Altitude de transição ou nível de transição',
     'PU': 'Procedimento de aproximação perdida',
     'PX': 'Nível mínimo de espera',
-    'PZ': 'Procedimento ADIZ',
+    'PZ': 'Procedimento de zona de identificação de defesa aérea',
 
     # --- CNS (COMUNICAÇÃO/NAVEGAÇÃO) - COMUNICAÇÃO (C) ---
     'CA': 'Instalações ar-terra',
-    'CB': 'ADS-B',
-    'CC': 'ADS-C',
-    'CD': 'CPDLC',
+    'CB': 'Vigilância dependente automática – Radiodifusão',
+    'CC': 'Vigilância dependente automática – Contrato',
+    'CD': 'Comunicação porligação de dados controlador-piloto',
     'CE': 'Radar de vigilância em rota',
     'CG': 'Sistema de aproximação controlada do solo',
     'CL': 'Sistema de chamada seletiva',
     'CM': 'Radar de movimento na superfície',
-    'CP': 'Radar de aproximação de precisão',
-    'CR': 'Elemento de vigilância do radar de precisão',
+    'CP': 'Radar para aproximação de precisão',
+    'CR': 'Radar de vigilância que faz parte do sistema de radar para aproximação de precisão',
     'CS': 'Radar secundário de vigilância',
     'CT': 'Radar de vigilância de área terminal',
 
     # --- CNS (COMUNICAÇÃO/NAVEGAÇÃO) - SISTEMA DE POUSO (I) ---
     'IC': 'Sistema de pouso por instrumentos',
-    'ID': 'Equipamento radiotelemétrico associado ao ILS',
-    'IG': 'Trajetória de planeio',
-    'II': 'Marcador interno',
+    'ID': 'Equipamento radiotelemétrico associado com o ILS',
+    'IG': 'Trajetória de planeio (ILS)',
+    'II': 'Marcador interno (ILS)',
     'IL': 'Localizador (ILS)',
-    'IM': 'Marcador médio',
-    'IN': 'Localizador não associado ao ILS',
-    'IO': 'Marcador externo',
-    'IS': 'ILS categoria I',
-    'IT': 'ILS categoria II',
-    'IU': 'ILS categoria III',
+    'IM': 'Marcador médio (ILS)',
+    'IN': 'Localizador (não associado com ILS)',
+    'IO': 'Marcador externo (ILS)',
+    'IS': 'Sistema de pouso por instrumentos Categoria I',
+    'IT': 'Sistema de pouso por instrumentos Categoria II',
+    'IU': 'Sistema de pouso porinstrumentos Categoria III',
     'IW': 'Sistema de pouso por micro-ondas',
-    'IX': 'Localizador externo',
-    'IY': 'Localizador médio',
+    'IX': 'Radiofarol de localização externo (ILS)',
+    'IY': 'Radiofarol de localização médio (ILS)',
 
     # --- CNS (COMUNICAÇÃO/NAVEGAÇÃO) - GNSS (G) ---
-    'GA': 'Operações em aeródromo usando o sistema mundial de navegação por satélite',
+    'GA': 'Operações específicas de aeródromo coberto pelo sistema mundial de navegação por satélite',
     'GW': 'Operações em toda área coberta pelo sistema mundial de navegação por satélite',
 
     # --- CNS (COMUNICAÇÃO/NAVEGAÇÃO) - NAVEGAÇÃO (N) ---
-    'NA': 'Todas as instalações e serviços de radionavegação',
+    'NA': 'Todas asinstalações e serviços de radionavegação',
     'NB': 'Radiofarol não-direcional',
     'ND': 'Equipamento radiotelemétrico',
     'NF': 'Radiobaliza em leque',
     'NL': 'Radiofarol de localização',
-    'NM': 'Radiofarol onidirecional em VHF/Equipamento radiotelemétrico',
+    'NM': 'RadiofarolonidirecionalemVHF/Equipamento radiotelemétrico',
     'NN': 'Auxílio à navegação aérea tática em frequência ultra-alta',
     'NT': 'Radiofarol onidirecional em VHF e Auxílio à navegação aérea tática em frequência ultra-alta combinados',
     'NV': 'Radiofarol onidirecional em VHF',
@@ -192,22 +193,26 @@ NOTAM_SUBJECT = {
     'WL': 'Ascensão de balão livre',
     'WM': 'Lançamento de foguete, míssel ou disparo de arma de fogo',
     'WP': 'Exercício de salto de paraquedas, parapente ou asa delta',
-    'WR': 'Materiais radioativos ou químicos tóxicos',
+    'WR': 'Materiaisradioativos ou químicos tóxicos',
     'WS': 'Explosão ou queima de gases',
     'WT': 'Movimento em massa de aeronaves',
+    'WU': 'Aeronaves não tripuladas',
+    'WV': 'Voo em formação',
+    'WW': 'Atividade vulcânica significativa',
+    'WY': 'Reconhecimento aéreo',
 
     # --- OUTRAS INFORMAÇÕES (O) ---
-    'OA': 'Serviço de Informação Aeronáutica (AIS)',
+    'OA': 'Serviços de informação aeronáutica',
     'OB': 'Obstáculo',
     'OE': 'Exigências de entrada de aeronaves',
-    'OL': 'Luzes de obstáculo',
+    'OL': 'Luzes de obstáculo sobre . . .',
     'OR': 'Centro de coordenação de salvamento',
     
     # --- ESPECIAL ---
     'KK': 'Lista de verificação',
     
     # --- OUTROS (X) ---
-    'XX': 'linguagem clara'
+    'XX': 'Linguagem clara'
 }
 
 # ---------------------------------------------------------
@@ -225,7 +230,7 @@ NOTAM_CONDITION = {
     'AM': 'Somente para operações militares',
     'AN': 'Disponível para operação noturna',
     'AO': 'Operacional',
-    'AP': 'Disponível, requer autorização prévia',
+    'AP': 'Disponível,requer autorização prévia',
     'AR': 'Disponível a pedido',
     'AS': 'Não utilizável',
     'AU': 'Não disponível',
@@ -237,7 +242,7 @@ NOTAM_CONDITION = {
     'CC': 'Concluído',
     'CD': 'Desativado',
     'CE': 'Montado',
-    'CF': 'Frequência(s) de operação modificada(s) para',
+    'CF': 'Frequência(s) de operaçãomodificada(s) para',
     'CG': 'Reduzido para',
     'CH': 'Modificado',
     'CI': 'Identificação rádio modificada para ou indicativo de chamada por rádio modificada para',
@@ -275,11 +280,11 @@ NOTAM_CONDITION = {
     'HW': 'Obras em andamento',
     'HX': 'Concentração de pássaros',
     'HY': 'Existem bancos de neve (especificar a altura)',
-    'HZ': 'Coberto por sulcos e cumes congelados',
+    'HZ': 'Coberto porsulcos e cumes congelados',
 
     # --- LIMITAÇÕES (L) ---
     'LA': 'Operando com fonte de energia auxiliar',
-    'LB': 'Reservado para aeronaves locais',
+    'LB': 'Reservado para aeronaveslocais',
     'LC': 'Fechado',
     'LD': 'Inseguro',
     'LE': 'Operando sem força auxiliar',
@@ -288,8 +293,16 @@ NOTAM_CONDITION = {
     'LH': 'Não utilizável para aeronaves mais pesadas que',
     'LI': 'Fechado para operações com regras de voo por instrumentos',
     'LK': 'Operando com uma luz fixa',
-    'LL': 'Utilizável com o comprimento de . . . e largura de . . .',
+    'LL': 'Utilizável com o comprimento de . . . e a largura de . . .',
+    'LN': 'Fechado para todas as operações noturnas',
+    'LP': 'Proibido para',
+    'LR': 'Aeronavesrestritas às pistas e pistas de táxi',
+    'LS': 'Sujeito à interrupção',
+    'LT': 'Limitado para',
+    'LV': 'Fechado para operações com regras de voo visual',
+    'LW': 'Acontecerá',
+    'LX': 'Operando, mas com cautela devido a',
 
     # --- OUTROS (X) ---
-    'XX': 'linguagem clara'
+    'XX': 'Linguagem clara'
 }
