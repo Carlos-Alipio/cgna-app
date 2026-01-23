@@ -55,10 +55,13 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL (V20.0 - FINAL FIX)
+# FUNÇÃO PRINCIPAL (V20.0 - FINAL STABLE)
 # ==============================================================================
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
+    """
+    V20.0: Correção de Pernoite seletiva (Apenas Numéricos) e Regex Contínuo.
+    """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = None
     if item_c_raw and "PERM" in str(item_c_raw).upper():
@@ -150,18 +153,10 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 # Dias da Semana (MON/TUE)
                 if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
-                    eh_par_consecutivo = False
-                    if len(partes) == 2 and partes[0] in WEEK_MAP and partes[1] in WEEK_MAP:
-                        idx0 = WEEK_MAP[partes[0]]
-                        idx1 = WEEK_MAP[partes[1]]
-                        if idx1 == (idx0 + 1) % 7: eh_par_consecutivo = True
-
-                    # FIX: Poda para Casos 16 e 60
-                    if is_overnight and eh_par_consecutivo:
-                         filtro_semana_deste_segmento.add(WEEK_MAP[partes[0]])
-                    else:
-                        for p in partes:
-                            if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
+                    # V20.0: SEM PRUNING PARA DIAS DA SEMANA
+                    # MON/TUE overnight significa que opera na Seg à noite E na Ter à noite.
+                    for p in partes:
+                        if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     k += 1; continue
                 
                 # Range TIL
@@ -172,11 +167,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if alvo_tok in WEEK_MAP:
                             idx_alvo = WEEK_MAP[alvo_tok]
                             
-                            # Tratamento para TIL THU/FRI em Overnight
-                            if "/" in alvo_tok:
+                            # Range normal, inclusivo
+                            if "/" in alvo_tok: # Tratamento para TIL THU/FRI
                                 subpartes = alvo_tok.split("/")
-                                if subpartes[0] in WEEK_MAP:
-                                    idx_alvo = WEEK_MAP[subpartes[0]] # Pega só o primeiro dia do par final
+                                if subpartes[0] in WEEK_MAP: idx_alvo = WEEK_MAP[subpartes[0]] 
+                                # Aqui podemos pegar só o primeiro se for overnight, 
+                                # mas vamos manter conservador para evitar perda de dados
                             
                             if idx_tok <= idx_alvo: filtro_semana_deste_segmento.update(range(idx_tok, idx_alvo + 1))
                             else: 
@@ -222,7 +218,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                             if v2 == v1 + 1 or (v1 >= 28 and v2 == 1): consecutivos = True
                         except: pass
 
-                        # FIX: Poda para Casos 48-58
+                        # V20.0: PRUNING ATIVO APENAS PARA NUMÉRICOS
                         if is_overnight and consecutivos and len(partes) == 2:
                              dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
                              if dt: datas_deste_segmento.append(dt)
@@ -273,7 +269,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             s_ini_teorico = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
             s_ini = max(s_ini_teorico, dt_b)
             
-            # FIX: Lógica Contínua para Caso 28
+            # Lógica Contínua (Resolve Caso 28)
             if tipo_match == 'continuo':
                 dia_alvo = dia_fim_target
                 mes_fim_calc = dt_final.month
