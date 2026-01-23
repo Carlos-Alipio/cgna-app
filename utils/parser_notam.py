@@ -55,12 +55,13 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
     return dt
 
 # ==============================================================================
-# FUNÇÃO PRINCIPAL (V19.0 RECOVERY)
+# FUNÇÃO PRINCIPAL (V19.1 - PRECISION FIX)
 # ==============================================================================
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V19.0: Restauração da estabilidade (Base V18.3) com correções pontuais para TUE-TIL-SAT e Contínuos.
+    V19.1: Base V19.0 + Poda de Overnights duplicados e Ajuste de Regex Contínuo.
+    Objetivo: Zerar os 13 erros remanescentes.
     """
     dt_b = parse_notam_date(item_b_raw)
     dt_c = None
@@ -85,12 +86,9 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     contexto_ano = dt_b.year
     contexto_mes = dt_b.month
 
-    # REGEXES
-    # R1: Complexo
+    # Regexes
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
-    # R2: Contínuo (Para Caso 28)
     regex_continuous = r'(\d{4})\s+TIL\s+(\d{1,2})\s+(\d{4})'
-    # R3: Simples
     regex_simples = r'(\d{4})\s*(?:-|TIL)\s*(\d{4})'
     
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_continuous})|(?:{regex_simples})')
@@ -111,7 +109,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
         tipo_match = None
         is_overnight = False
-        dia_fim_target = None # Para regex contínuo
+        dia_fim_target = None 
 
         if c_dia_ini:
             tipo_match = 'complexo'
@@ -121,10 +119,12 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             filtro_dia_inicio = idx_ini 
             if idx_fim >= idx_ini: offset_dias = idx_fim - idx_ini
             else: offset_dias = (7 - idx_ini) + idx_fim
+            
         elif cont_hora_ini:
             tipo_match = 'continuo'
             h_ini_str, h_fim_str = cont_hora_ini, cont_hora_fim
             dia_fim_target = int(cont_dia_fim)
+            
         else:
             tipo_match = 'simples'
             h_ini_str, h_fim_str = s_hora_ini, s_hora_fim
@@ -150,11 +150,25 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             k = 0 
             while k < len(tokens):
                 tok = tokens[k]
+                
+                # Dias da Semana (MON/TUE)
                 if "/" in tok and not tok[0].isdigit():
                     partes = tok.split("/")
-                    for p in partes:
-                        if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
+                    eh_par_consecutivo = False
+                    if len(partes) == 2 and partes[0] in WEEK_MAP and partes[1] in WEEK_MAP:
+                        idx0 = WEEK_MAP[partes[0]]
+                        idx1 = WEEK_MAP[partes[1]]
+                        if idx1 == (idx0 + 1) % 7: eh_par_consecutivo = True
+
+                    # FIX: Poda para Casos 16 e 60
+                    if is_overnight and eh_par_consecutivo:
+                         filtro_semana_deste_segmento.add(WEEK_MAP[partes[0]])
+                    else:
+                        for p in partes:
+                            if p in WEEK_MAP: filtro_semana_deste_segmento.add(WEEK_MAP[p])
                     k += 1; continue
+                
+                # Range TIL
                 if tok in WEEK_MAP:
                     idx_tok = WEEK_MAP[tok]
                     if k + 2 < len(tokens) and tokens[k+1] == "TIL":
@@ -175,7 +189,9 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 if tok in WEEK_MAP or ("/" in tok and not tok[0].isdigit()): i += 1; continue
                 if tok == "TIL" and i>0 and (tokens[i-1] in WEEK_MAP or ("/" in tokens[i-1] and not tokens[i-1][0].isdigit())): i += 1; continue
                 if tok in MONTH_MAP: contexto_mes = MONTH_MAP[tok]; i += 1; continue
+                
                 if tok[0].isdigit():
+                    # Range Numérico
                     if i + 2 < len(tokens) and tokens[i+1] == "TIL":
                         alvo = tokens[i+2]
                         dia_start = int(tok.split("/")[0])
@@ -189,12 +205,25 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                                 dia_end = int(tokens[i+3].split("/")[0])
                                 datas_deste_segmento.extend(gerar_sequencia_datas(contexto_ano, contexto_mes, dia_start, mes_dest, dia_end))
                                 contexto_mes = mes_dest; i += 4; continue
+                    
+                    # Lista com Barras
                     if "/" in tok: 
                         partes = tok.split("/")
-                        # V19.0: Sem poda agressiva. Adiciona tudo.
-                        for p in partes:
-                            dt = criar_data_segura(contexto_ano, contexto_mes, int(p))
-                            if dt: datas_deste_segmento.append(dt)
+                        consecutivos = False
+                        try:
+                            v1 = int(partes[0])
+                            v2 = int(partes[1])
+                            if v2 == v1 + 1 or (v1 >= 28 and v2 == 1): consecutivos = True
+                        except: pass
+
+                        # FIX: Poda para Casos 48-58
+                        if is_overnight and consecutivos and len(partes) == 2:
+                             dt = criar_data_segura(contexto_ano, contexto_mes, int(partes[0]))
+                             if dt: datas_deste_segmento.append(dt)
+                        else:
+                            for p in partes:
+                                dt = criar_data_segura(contexto_ano, contexto_mes, int(p))
+                                if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                     else:
                         dt = criar_data_segura(contexto_ano, contexto_mes, int(tok))
@@ -202,7 +231,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         i += 1; continue
                 i += 1
             
-            # --- FIX 1: FALLBACK PARA TUE TIL SAT ---
+            # FIX: Fallback TUE TIL SAT
             if not datas_deste_segmento and filtro_semana_deste_segmento:
                 curr = dt_b
                 while curr <= dt_c + timedelta(days=1): 
@@ -225,7 +254,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             datas_deste_segmento = ultima_lista_datas
             filtro_semana_deste_segmento = ultimo_filtro_semana
 
-        # Geração dos Slots
+        # Geração
         for dt_crua in datas_deste_segmento:
             dt_final = ajustar_ano_referencia(dt_crua, dt_b)
             if not dt_final: continue
@@ -235,16 +264,15 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
-            # --- FIX 2: REGEX CONTÍNUO (CASO 28) ---
+            s_ini_teorico = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
+            s_ini = max(s_ini_teorico, dt_b)
+            
+            # FIX: Lógica Contínua para Caso 28
             if tipo_match == 'continuo':
-                s_ini = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
-                s_ini = max(s_ini, dt_b)
-                
                 dia_alvo = dia_fim_target
                 mes_fim_calc = dt_final.month
                 ano_fim_calc = dt_final.year
                 
-                # Tratamento de virada de mês/ano para o dia de fim
                 if dia_alvo < dt_final.day:
                     mes_fim_calc += 1
                     if mes_fim_calc > 12:
@@ -257,10 +285,6 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                 s_fim = dt_fim_base.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
             
             else:
-                # Lógica Padrão (Simples e Complexo)
-                s_ini = dt_final.replace(hour=int(h_ini_str[:2]), minute=int(h_ini_str[2:]))
-                s_ini = max(s_ini, dt_b)
-                
                 s_fim = dt_final.replace(hour=int(h_fim_str[:2]), minute=int(h_fim_str[2:]))
                 if s_ini >= s_fim and not ("DLY" in segmento or "DAILY" in segmento):
                      s_fim = s_ini + timedelta(minutes=1)
