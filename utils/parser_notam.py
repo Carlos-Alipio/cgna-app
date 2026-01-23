@@ -49,7 +49,7 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
+    V18.3 (Corrigida): Inclui fallback para dias da semana sem datas explícitas.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -97,7 +97,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     # --- FASE 1: SCANNER MESTRE ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
-    regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
+    # Pequeno ajuste no regex simples para tolerar espaços eventuais, garantindo robustez
+    regex_simples = r'(\d{4})\s*(?:-|TIL)\s*(\d{4})'
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
 
     matches = list(re_master.finditer(text))
@@ -192,7 +193,19 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
+            
+            # --- CORREÇÃO AQUI (O Pulo do Gato) ---
+            # Se encontrou filtros de semana (TUE TIL SAT) mas nenhuma data específica,
+            # preenche com todas as datas entre B e C para que o filtro possa atuar.
+            if not datas_deste_segmento and filtro_semana_deste_segmento:
+                curr = dt_b
+                while curr <= dt_c: 
+                    datas_deste_segmento.append(curr)
+                    curr += timedelta(days=1)
+            # --------------------------------------
+
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
+        
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
             while curr <= dt_c: datas_deste_segmento.append(curr); curr += timedelta(days=1)
@@ -211,6 +224,7 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
             if is_complex and filtro_dia_inicio is not None:
                 if dt_final.weekday() != filtro_dia_inicio: continue
+            # Aplica o filtro de semana nos dias gerados
             elif filtro_semana_deste_segmento and dt_final.weekday() not in filtro_semana_deste_segmento:
                 continue
             
