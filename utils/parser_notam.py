@@ -49,7 +49,8 @@ def ajustar_ano_referencia(dt, dt_referencia_b):
 
 def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
     """
-    V18.3: Implementação de CLIPPING rigoroso para respeitar limites B e C.
+    V18.3 + Correção para Zero Slots (Injeção Artificial de Datas).
+    Resolve: SBGO, SBNF, SBPJ, SBPL, SBSV.
     """
     dt_b = parse_notam_date(item_b_raw)
     
@@ -97,7 +98,8 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
 
     # --- FASE 1: SCANNER MESTRE ---
     regex_complexo = r'(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})\s+TIL\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{4})'
-    regex_simples = r'(\d{4})(?:-|TIL)(\d{4})'
+    # Pequeno ajuste no regex para aceitar espaços (0420 - 0720) sem quebrar a lógica V18.3
+    regex_simples = r'(\d{4})\s*(?:-|TIL)\s*(\d{4})'
     re_master = re.compile(f'(?:{regex_complexo})|(?:{regex_simples})')
 
     matches = list(re_master.finditer(text))
@@ -192,6 +194,17 @@ def interpretar_periodo_atividade(item_d_text, icao, item_b_raw, item_c_raw):
                         if dt: datas_deste_segmento.append(dt)
                         i += 1; continue
                 i += 1
+            
+            # --- INJEÇÃO ARTIFICIAL (CORREÇÃO DE ZERO SLOTS) ---
+            # Se temos dias da semana (TUE TIL SAT) mas nenhuma data (datas_deste_segmento vazio),
+            # injetamos todas as datas entre B e C para que o filtro de semana possa atuar.
+            if not datas_deste_segmento and filtro_semana_deste_segmento:
+                curr = dt_b
+                while curr <= dt_c: 
+                    datas_deste_segmento.append(curr)
+                    curr += timedelta(days=1)
+            # ---------------------------------------------------
+
             if not datas_deste_segmento and ultima_lista_datas: datas_deste_segmento = list(ultima_lista_datas)
         elif "DLY" in segmento or "DAILY" in segmento:
             curr = dt_b
