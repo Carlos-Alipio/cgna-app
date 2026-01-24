@@ -83,36 +83,35 @@ def toggle_dia_callback(a, m, d):
 # ==============================================================================
 # 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORREÇÃO DEFINITIVA)
 # ==============================================================================
-# 1.1 Carrega dados brutos do banco
+# 1.1 Carrega dados brutos
 df_raw = db_manager.carregar_notams()
 
 if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# 1.2 Limpeza inicial: Cópia profunda e reset de índice (Zera a contagem das linhas)
+# 1.2 Limpeza inicial: Cópia profunda e reset de índice (Essencial!)
 df_notams = df_raw.copy().reset_index(drop=True)
 
-# 1.3 Mapeamento de nomes (Supabase -> Aplicação)
+# 1.3 Mapeamento (Supabase -> Código)
 mapeamento = {'icaoairport_id': 'loc', 'id': 'n'}
 df_notams = df_notams.rename(columns=mapeamento)
 
-# 1.4 Tratamento de Nulos (Evita erro ao somar texto)
+# 1.4 Tratamento de Nulos
 for col in ['loc', 'n', 'assunto_desc']:
     if col not in df_notams.columns:
         df_notams[col] = "N/I"
     else:
         df_notams[col] = df_notams[col].fillna("N/I").astype(str)
 
-# 1.5 Criação do ID Único (Usa .apply para evitar ValueError de índice)
+# 1.5 Criação do ID Único (Usa .apply para evitar erro de índice)
 df_notams['id_notam'] = df_notams.apply(lambda x: f"{x['loc']}_{x['n']}", axis=1)
 
 # 1.6 Filtragem (df_critico)
-# Se tiver filtros de frota/assunto, aplique aqui. Ex:
-# df_critico = df_notams[df_notams['loc'].isin(frota)].copy()
+# Adicione seus filtros aqui se necessário
 df_critico = df_notams.copy()
 
-# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO (AQUI OCORRIA O ERRO)
+# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO
 cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
 
 # Garante que as colunas existam
@@ -123,12 +122,12 @@ for col in cols_selecao:
 # Cria a cópia do recorte
 df_sel = df_critico[cols_selecao].copy()
 
-# --- CORREÇÃO FINAL PARA O ERRO DA LINHA 141 ---
-# 1. Resetamos o índice do recorte para garantir sequencia limpa (0, 1, 2...)
+# --- A CORREÇÃO CRUCIAL ESTÁ AQUI ---
+# 1. Resetamos o índice novamente por segurança
 df_sel = df_sel.reset_index(drop=True)
 
-# 2. Usamos .apply() para criar o Rótulo. 
-# Isso evita que o Pandas tente alinhar índices vetorialmente, resolvendo o ValueError.
+# 2. SUBSTITUÍMOS O SINAL DE '+' PELO .APPLY
+# A linha antiga (que dava erro) foi removida. Esta nova funciona sempre:
 df_sel['Rotulo'] = df_sel.apply(lambda x: f"{x['loc']} {x['n']}", axis=1)
 
 # ==============================================================================
