@@ -3,20 +3,22 @@ import time
 import hashlib
 from sqlalchemy import text
 import extra_streamlit_components as stx
-from utils import login_manager, ui, db_manager
 
-# 1. Configuração da Página (Sempre o primeiro comando)
+# 1. CONFIGURAÇÃO (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
     page_title="CGNA - GOL", 
     page_icon="assets/logo-voegol-new.svg", 
-    layout="centered" if 'logado' not in st.session_state or not st.session_state['logado'] else "wide"
+    layout="wide"
 )
 
-# 2. Inicialização de Componentes
+# Agora podemos importar seus módulos
+from utils import login_manager, ui
+
+# 2. INICIALIZAÇÃO DE COMPONENTES
 cookie_manager = stx.CookieManager(key="main_auth_interface")
 conn = st.connection("supabase", type="sql")
 
-# --- LISTA VIP & AUXILIARES ---
+# --- AUXILIARES ---
 EMAILS_PERMITIDOS = ["aguedespereira@voegol.com.br", "jsgalvao@voegol.com.br", "cafmorais@voegol.com.br"]
 
 def buscar_usuario_por_email(email):
@@ -26,17 +28,17 @@ def buscar_usuario_por_email(email):
         return df.iloc[0] if not df.empty else None
     except: return None
 
-def criar_hash(senha): return hashlib.sha256(str.encode(senha)).hexdigest()
+def criar_hash(senha): 
+    return hashlib.sha256(str.encode(senha)).hexdigest()
 
 # ==============================================================================
-# LÓGICA DE AUTENTICAÇÃO
+# LÓGICA DE SESSÃO E LOGIN
 # ==============================================================================
 if 'logado' not in st.session_state:
     st.session_state['logado'] = False
 
-# Verificação de Cookie (Auto-login)
+# Auto-login via Cookie
 if not st.session_state['logado']:
-    time.sleep(0.1) 
     email_cookie = login_manager.get_usuario_cookie(cookie_manager)
     if email_cookie:
         usuario_db = buscar_usuario_por_email(email_cookie)
@@ -46,10 +48,10 @@ if not st.session_state['logado']:
             st.rerun()
 
 # ==============================================================================
-# INTERFACE: LOGIN OU NAVEGAÇÃO
+# RENDERIZAÇÃO DA INTERFACE
 # ==============================================================================
 if not st.session_state['logado']:
-    # Remove sidebar no login
+    # TELA DE LOGIN (SEM SIDEBAR)
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
     
     st.title("🔒 Login CGNA")
@@ -65,30 +67,30 @@ if not st.session_state['logado']:
                 st.session_state['usuario_atual'] = user['nome']
                 login_manager.realizar_login_cookie(cookie_manager, e_log)
                 st.rerun()
-            else: st.error("Credenciais inválidas.")
-
+            else:
+                st.error("Credenciais inválidas.")
     with t2:
-        st.info("Entre em contato com o administrador para liberação de e-mails VIP.")
-        # Mantenha aqui sua lógica de salvar_novo_usuario se desejar
+        st.info("Cadastro habilitado apenas para e-mails autorizados.")
 
 else:
-    # USUÁRIO LOGADO: LIBERA NAVEGAÇÃO
-    ui.setup_sidebar() # Exibe o Logo
+    # USUÁRIO LOGADO: CONFIGURA NAVEGAÇÃO
+    ui.setup_sidebar() # Carrega o st.logo
     
-    # Definição das Páginas (Material Symbols!)
+    # Definição das Páginas (Caminhos relativos à raiz)
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
     pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Monitoramento Obras", icon=":material/construction:")
-    pg_notam = st.Page("pages/Configuracoes.py", title="Configurações", icon=":material/settings:")
+    pg_config = st.Page("pages/Configuracoes.py", title="Configurações", icon=":material/settings:")
 
-    # Botão de Logout Manual na Sidebar
+    # Navegação com Agrupamento
+    pg = st.navigation({
+        "Menu": [pg_home],
+        "Ferramentas": [pg_obras, pg_config]
+    })
+    
+    # Botão de Sair na Sidebar
     if st.sidebar.button("Sair", icon=":material/logout:"):
         login_manager.realizar_logout(cookie_manager)
         st.session_state['logado'] = False
         st.rerun()
 
-    # Rodar Navegação
-    pg = st.navigation({
-        "Menu": [pg_home],
-        "Ferramentas": [pg_obras, pg_notam]
-    })
     pg.run()

@@ -1,21 +1,17 @@
 import streamlit as st
 
-# Recupera o nome do usuário da sessão
-nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
+# Pega o nome do Carlos ou de quem estiver logado
+nome = st.session_state.get('usuario_atual', 'Usuário')
 
-st.title(f"Olá, {nome_usuario}")
-st.success("Você está conectado ao sistema de Monitoramento CGNA - GOL.")
+st.title(f"👋 Olá, {nome}")
+st.success("Você está conectado ao sistema.")
 
-# Painel de Resumo Visual
 st.divider()
+
+# Exemplo de Dashboard simples para a Home
 c1, c2, c3 = st.columns(3)
+c1.metric("Obras Ativas", "12")
+c2.metric("NOTAMs Críticos", "05")
+c3.metric("Status do Sistema", "OK")
 
-with c1:
-    st.metric("Obras em Foco", "12")
-with c2:
-    st.metric("Avisos Recentes", "08")
-with c3:
-    st.metric("Status API", "Online", delta="Normal")
-
-st.markdown("---")
-st.info("Utilize o menu lateral para navegar entre as ferramentas de monitoramento e configuração.")
+st.info("Dica: Use o menu lateral para acessar o Monitoramento de Obras.")
