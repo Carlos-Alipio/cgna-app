@@ -3,24 +3,20 @@ import time
 import hashlib
 from sqlalchemy import text
 import extra_streamlit_components as stx
+from utils import login_manager, ui
 
-# 1. CONFIGURAÇÃO (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
+# 1. CONFIGURAÇÃO INICIAL (Sempre o primeiro comando)
 st.set_page_config(
     page_title="CGNA - GOL", 
     page_icon="assets/logo-voegol-new.svg", 
     layout="wide"
 )
 
-# Agora podemos importar seus módulos
-from utils import login_manager, ui
-
-# 2. INICIALIZAÇÃO DE COMPONENTES
+# 2. COMPONENTES DE CONEXÃO
 cookie_manager = stx.CookieManager(key="main_auth_interface")
 conn = st.connection("supabase", type="sql")
 
 # --- AUXILIARES ---
-EMAILS_PERMITIDOS = ["aguedespereira@voegol.com.br", "jsgalvao@voegol.com.br", "cafmorais@voegol.com.br"]
-
 def buscar_usuario_por_email(email):
     try:
         if not email: return None
@@ -32,13 +28,14 @@ def criar_hash(senha):
     return hashlib.sha256(str.encode(senha)).hexdigest()
 
 # ==============================================================================
-# LÓGICA DE SESSÃO E LOGIN
+# LÓGICA DE LOGIN E SESSÃO
 # ==============================================================================
 if 'logado' not in st.session_state:
     st.session_state['logado'] = False
 
-# Auto-login via Cookie
+# Tentativa de auto-login via Cookie
 if not st.session_state['logado']:
+    time.sleep(0.1) 
     email_cookie = login_manager.get_usuario_cookie(cookie_manager)
     if email_cookie:
         usuario_db = buscar_usuario_por_email(email_cookie)
@@ -48,10 +45,10 @@ if not st.session_state['logado']:
             st.rerun()
 
 # ==============================================================================
-# RENDERIZAÇÃO DA INTERFACE
+# INTERFACE
 # ==============================================================================
 if not st.session_state['logado']:
-    # TELA DE LOGIN (SEM SIDEBAR)
+    # Oculta a barra lateral na tela de login
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
     
     st.title("🔒 Login CGNA")
@@ -70,24 +67,24 @@ if not st.session_state['logado']:
             else:
                 st.error("Credenciais inválidas.")
     with t2:
-        st.info("Cadastro habilitado apenas para e-mails autorizados.")
+        st.info("Cadastro restrito a e-mails autorizados.")
 
 else:
-    # USUÁRIO LOGADO: CONFIGURA NAVEGAÇÃO
-    ui.setup_sidebar() # Carrega o st.logo
+    # --- USUÁRIO LOGADO: DEFINIÇÃO DE NAVEGAÇÃO ---
+    ui.setup_sidebar() # Carrega o logo do menu lateral
     
-    # Definição das Páginas (Caminhos relativos à raiz)
+    # IMPORTANTE: "pages/inicio.py" deve conter o texto de boas-vindas
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
-    pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Monitoramento Obras", icon=":material/construction:")
-    pg_config = st.Page("pages/Configuracoes.py", title="Configurações", icon=":material/settings:")
+    pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
+    pg_config = st.Page("pages/Configuracoes.py", title="Ajustes", icon=":material/settings:")
 
-    # Navegação com Agrupamento
+    # Navegação Agrupada
     pg = st.navigation({
-        "Menu": [pg_home],
-        "Ferramentas": [pg_obras, pg_config]
+        "Principal": [pg_home],
+        "Operacional": [pg_obras, pg_config]
     })
-    
-    # Botão de Sair na Sidebar
+
+    # Botão Sair na Sidebar
     if st.sidebar.button("Sair", icon=":material/logout:"):
         login_manager.realizar_logout(cookie_manager)
         st.session_state['logado'] = False
