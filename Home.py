@@ -142,7 +142,7 @@ if not st.session_state['logado']:
 
 else:
     st.title(f"Olá, {st.session_state.get('usuario_atual', 'Usuário')}")
-    st.success("Você está conectado ao banco de dados Nuvem ☁️")
+    st.success("Você está conectado.")
     # BOTÃO SAIR (Passando o manager)
     if st.button("Sair"):
         login_manager.realizar_logout(cookie_manager)
