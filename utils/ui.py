@@ -27,7 +27,7 @@ def barra_superior():
         <div class="custom-navbar">
             <div class="nav-left">
                 <img src="{img_src}" class="nav-logo">
-                <span class="nav-brand">CGNA | </span>
+                <span class="nav-brand">CGNA</span>
             </div>
             <div class="nav-left">
                 <span class="nav-user">{nome_usuario}</span>
