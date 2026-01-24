@@ -10,7 +10,7 @@ from utils import ui
 # CONFIGURAÇÃO E ESTILIZAÇÃO
 # ==============================================================================
 st.set_page_config(page_title="Gestão de Obras", layout="wide")
-st.title("Monitoramento & Cadastro de Obras")
+st.title("Cadastro de Obras")
 ui.setup_sidebar() # <--- Chama o logo aqui
 
 st.markdown("""

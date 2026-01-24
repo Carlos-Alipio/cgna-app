@@ -7,7 +7,7 @@ from utils import ui
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
-st.title("✈️ Monitoramento de NOTAMs")
+st.title("Monitoramento de NOTAMs")
 ui.setup_sidebar() # <--- Chama o logo aqui
 
 # --- SEGURANÇA ---

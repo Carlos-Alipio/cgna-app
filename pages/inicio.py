@@ -6,7 +6,7 @@ ui.barra_superior()
 
 nome = st.session_state.get('usuario_atual', 'Usuário')
 
-st.title(f"👋 Bem-vindo, {nome}")
+st.title(f"Bem-vindo, {nome}")
 st.success("Acesso autorizado ao painel operacional.")
 
 st.divider()

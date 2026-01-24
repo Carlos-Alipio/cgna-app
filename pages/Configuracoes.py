@@ -8,7 +8,7 @@ from utils import db_manager
 from utils.notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION 
 
 st.set_page_config(page_title="Configurações", layout="wide")
-st.title("⚙️ Configurações do Sistema")
+st.title("Configurações do Sistema")
 ui.setup_sidebar() # <--- Chama o logo aqui
 
 # --- SEGURANÇA ---
