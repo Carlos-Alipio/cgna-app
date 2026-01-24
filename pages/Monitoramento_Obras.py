@@ -81,7 +81,7 @@ def toggle_dia_callback(a, m, d):
     else: st.session_state.dias_selecionados.add(k)
 
 # ==============================================================================
-# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORREÇÃO DEFINITIVA)
+# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORRIGIDO)
 # ==============================================================================
 # 1.1 Carrega dados brutos
 df_raw = db_manager.carregar_notams()
@@ -90,10 +90,10 @@ if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# 1.2 Limpeza inicial: Cópia profunda e reset de índice (Essencial!)
+# 1.2 Limpeza inicial: Cópia e Reset de Índice
 df_notams = df_raw.copy().reset_index(drop=True)
 
-# 1.3 Mapeamento (Supabase -> Código)
+# 1.3 Mapeamento de colunas (Supabase -> App)
 mapeamento = {'icaoairport_id': 'loc', 'id': 'n'}
 df_notams = df_notams.rename(columns=mapeamento)
 
@@ -104,30 +104,27 @@ for col in ['loc', 'n', 'assunto_desc']:
     else:
         df_notams[col] = df_notams[col].fillna("N/I").astype(str)
 
-# 1.5 Criação do ID Único (Usa .apply para evitar erro de índice)
+# 1.5 Criação do ID Único (Via apply para evitar erro de índice)
 df_notams['id_notam'] = df_notams.apply(lambda x: f"{x['loc']}_{x['n']}", axis=1)
 
 # 1.6 Filtragem (df_critico)
-# Adicione seus filtros aqui se necessário
 df_critico = df_notams.copy()
 
-# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO
+# 1.7 Tabela de Seleção
 cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
-
-# Garante que as colunas existam
 for col in cols_selecao:
     if col not in df_critico.columns:
         df_critico[col] = "N/I"
 
-# Cria a cópia do recorte
 df_sel = df_critico[cols_selecao].copy()
 
-# --- A CORREÇÃO CRUCIAL ESTÁ AQUI ---
-# 1. Resetamos o índice novamente por segurança
+# ------------------------------------------------------------------
+# AQUI ESTÁ A CORREÇÃO PRINCIPAL
+# ------------------------------------------------------------------
+# 1. Limpa o índice do recorte
 df_sel = df_sel.reset_index(drop=True)
 
-# 2. SUBSTITUÍMOS O SINAL DE '+' PELO .APPLY
-# A linha antiga (que dava erro) foi removida. Esta nova funciona sempre:
+# 2. Usa .apply() em vez de soma (+). Isso ignora problemas de alinhamento.
 df_sel['Rotulo'] = df_sel.apply(lambda x: f"{x['loc']} {x['n']}", axis=1)
 
 # ==============================================================================
