@@ -15,6 +15,29 @@ st.set_page_config(
 )
 ui.setup_sidebar() # <--- Chama o logo aqui
 
+
+# 1. Defina as páginas e seus ÍCONES (Aqui está o pulo do gato!)
+pg_home = st.Page("Home.py", title="Visão Geral", icon=":material/home:")
+pg_Notam = st.Page("pages/Notam.py", title="Notam", icon=":material/connecting_airports:")
+pg_obras = st.Page("pages/4-Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
+pg_config = st.Page("pages/Configurações.py", title="Ajustes", icon=":material/settings:")
+
+# 2. Crie a navegação
+pg = st.navigation([pg_home, pg_obras, pg_config])
+
+# 3. Execute
+st.set_page_config(page_title="Gerenciador CGNA", page_icon=":material/flight_takeoff:")
+pg.run()
+
+
+
+
+
+
+
+
+
+
 # ==============================================================================
 # INICIALIZAÇÃO DO COOKIE MANAGER (UMA VEZ SÓ)
 # ==============================================================================
