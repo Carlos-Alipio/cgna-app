@@ -246,9 +246,8 @@ with tab_cadastro:
                 else:
                     st.warning(f"🕒 {d_text}")
 
-                with st.expander("E) Texto Completo"):
-                    st.code(notam_selecionado['e'], language="text")
-                    st.info(f"{notam_selecionado['e']}")
+                st.caption("E) Texto do Notam:")
+                st.info(f"{notam_selecionado['e']}")
 
             # --- CALENDÁRIO ---
             modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
