@@ -237,7 +237,12 @@ with tab_cadastro:
                 st.divider()
                 st.caption("D) Horários (Schedule)")
                 d_text = str(notam_selecionado['d']) if not pd.isna(notam_selecionado['d']) and str(notam_selecionado['d']).strip() != '' else "H24 / Não especificado"
-                st.info(f"🕒 {d_text}") if "H24" in d_text else st.warning(f"🕒 {d_text}")
+                
+                # CORREÇÃO AQUI: Uso de IF/ELSE tradicional para evitar print do objeto DeltaGenerator
+                if "H24" in d_text or "Não" in d_text:
+                    st.info(f"🕒 {d_text}")
+                else:
+                    st.warning(f"🕒 {d_text}")
 
                 with st.expander("E) Texto Completo"):
                     st.code(notam_selecionado['e'], language="text")
@@ -288,7 +293,7 @@ with tab_cadastro:
                 if st.session_state.editing_block_id:
                     st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
 
-    # --- LISTBOX DE ANÁLISE (CORRIGIDO) ---
+    # --- LISTBOX DE ANÁLISE ---
     st.divider()
     st.subheader("4. Análise Detalhada dos Slots")
     if st.session_state.cache_slots:
@@ -301,13 +306,11 @@ with tab_cadastro:
         df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
         df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
         
-        # --- CORREÇÃO DO ERRO .upper() ---
-        # Usamos um dicionário para traduzir, sem chained .replace()
+        # Mapeamento seguro de dias da semana
         dias_map = {
             'Monday': 'SEG', 'Tuesday': 'TER', 'Wednesday': 'QUA', 
             'Thursday': 'QUI', 'Friday': 'SEX', 'Saturday': 'SÁB', 'Sunday': 'DOM'
         }
-        # Obtém o nome em inglês e mapeia
         df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').map(dias_map)
         
         df_analise = df_analise.sort_values('start_dt')
