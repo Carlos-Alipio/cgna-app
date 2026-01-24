@@ -273,33 +273,27 @@ def limpar_registros_orfaos(ids_ativos):
         _save_db(db)
 
 
+import streamlit as st
+
 def buscar_estatisticas_dashboard():
-    """
-    Consulta o Supabase para obter os números reais do dashboard.
-    Retorna um dicionário com os valores.
-    """
+    """Consulta o Supabase com nomes de tabelas protegidos."""
     try:
-        # Usa a conexão SQL já configurada no seu app
         conn = st.connection("supabase", type="sql")
         
-        # 1. Busca total de obras ativas
-        # Ajuste o nome da coluna de status conforme seu banco
-        query_obras = "SELECT COUNT(*) FROM obras WHERE status = 'Ativo';"
+        # Testamos com "public"."obras" para evitar erro de relação inexistente
+        # Se no seu banco a tabela for "Obras" (com O maiúsculo), o SQL deve ser "Obras"
+        query_obras = 'SELECT COUNT(*) FROM "public"."obras" WHERE status = \'Ativo\';'
         total_obras = conn.query(query_obras).iloc[0, 0]
         
-        # 2. Busca total de NOTAMs ativos
-        query_notams = "SELECT COUNT(*) FROM notams WHERE status = 'Vigente';"
+        query_notams = 'SELECT COUNT(*) FROM "public"."notams" WHERE status = \'Vigente\';'
         total_notams = conn.query(query_notams).iloc[0, 0]
-        
-        # 3. Exemplo de cálculo de tempo médio (opcional)
-        # Se você tiver colunas de data_criacao e data_conclusao
-        # query_tempo = "SELECT AVG(data_fim - data_inicio) FROM registros;"
         
         return {
             "obras": total_obras,
             "notams": total_notams,
-            "tempo_medio": "4m" # Valor exemplo até você ter a coluna de tempo
+            "tempo_medio": "4m" 
         }
     except Exception as e:
-        st.error(f"Erro ao carregar dados do banco: {e}")
+        # Se falhar, pelo menos o app não quebra e mostra o erro real para ajuste
+        st.warning(f"Aviso: Verifique se as tabelas existem no Supabase. Erro: {e}")
         return {"obras": 0, "notams": 0, "tempo_medio": "0m"}
