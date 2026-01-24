@@ -2,13 +2,36 @@ import streamlit as st
 import base64
 import os
 
-# ... (mantém as funções setup_sidebar e get_base64_bin)
+def setup_sidebar():
+    """Configura a logo no menu lateral (atualmente vazio pois a logo foi para a barra)."""
+    pass
+
+def get_base64_bin(file_path):
+    """
+    Lê um arquivo local e o converte para uma string Base64.
+    Essencial para exibir imagens locais dentro de blocos HTML no Streamlit.
+    """
+    try:
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                data = f.read()
+            return base64.b64encode(data).decode()
+    except Exception:
+        return ""
+    return ""
 
 def barra_superior():
-    """Injeta a barra laranja e ajusta o tamanho do texto/ícones do menu lateral."""
+    """
+    Injeta a barra horizontal laranja #FF7020.
+    Contém: Logo GOL, Nome do Usuário e Relógio UTC vivo.
+    Também ajusta o tamanho dos itens do menu lateral.
+    """
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
-    logo_base64 = get_base64_bin("assets/logo-voegol-new.svg")
-    img_src = f"data:image/svg+xml;base64,{logo_base64}" if logo_base64 else ""
+    
+    # Caminho do logo e conversão para Base64
+    logo_path = "assets/logo-voegol-new.svg"
+    logo_b64 = get_base64_bin(logo_path)
+    img_src = f"data:image/svg+xml;base64,{logo_b64}" if logo_b64 else ""
 
     st.markdown(f"""
         <div class="custom-navbar">
@@ -38,7 +61,7 @@ def barra_superior():
         </script>
 
         <style>
-            /* Barra Superior Laranja */
+            /* 1. ESTILO DA BARRA LARANJA */
             .custom-navbar {{
                 position: fixed;
                 top: 0; left: 0; width: 100%; height: 60px;
@@ -51,27 +74,26 @@ def barra_superior():
             }}
             
             .nav-logo {{ height: 35px; margin-right: 15px; filter: brightness(0) invert(1); }}
+            .nav-left {{ display: flex; align-items: center; }}
+            .nav-brand {{ font-weight: 800; font-size: 1.1rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 15px; }}
+            .nav-user {{ margin-left: 15px; font-weight: 300; font-size: 0.85rem; opacity: 0.9; }}
+            .nav-right {{ text-align: right; line-height: 1.1; }}
+            .clock {{ font-size: 1.2rem; font-weight: 700; }}
+            .clock-label {{ font-size: 0.6rem; opacity: 0.8; letter-spacing: 0.5px; }}
 
-            /* --- NOVO: AJUSTE DO MENU LATERAL --- */
-            
-            /* Aumenta o texto dos links de navegação */
+            /* 2. AJUSTE DO MENU LATERAL (Texto e Ícones Maiores) */
             [data-testid="stSidebarNav"] span {{
-                font-size: 1.15rem !important; /* Ajuste este valor para o tamanho do texto */
+                font-size: 1.15rem !important;
                 font-weight: 500 !important;
             }}
-
-            /* Aumenta os ícones do Material Symbols no menu */
             [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{
-                font-size: 1.5rem !important; /* Ajuste este valor para o tamanho do ícone */
+                font-size: 1.5rem !important;
             }}
-            
-            /* Aumenta o espaçamento entre os itens para não ficarem amontoados */
             [data-testid="stSidebarNav"] li {{
-                margin-bottom: 5px !important;
+                margin-bottom: 8px !important;
             }}
 
-            /* --- FIM DO AJUSTE --- */
-
+            /* 3. COMPENSAÇÃO DE LAYOUT */
             [data-testid="stSidebar"] {{ padding-top: 60px !important; }}
             .main .block-container {{ padding-top: 90px !important; }}
             header {{ visibility: hidden; }}
