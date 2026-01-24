@@ -272,4 +272,34 @@ def limpar_registros_orfaos(ids_ativos):
     if alterou:
         _save_db(db)
 
-# ... (Mantenha suas outras funções de carregar_notams aqui) ...
+
+def buscar_estatisticas_dashboard():
+    """
+    Consulta o Supabase para obter os números reais do dashboard.
+    Retorna um dicionário com os valores.
+    """
+    try:
+        # Usa a conexão SQL já configurada no seu app
+        conn = st.connection("supabase", type="sql")
+        
+        # 1. Busca total de obras ativas
+        # Ajuste o nome da coluna de status conforme seu banco
+        query_obras = "SELECT COUNT(*) FROM obras WHERE status = 'Ativo';"
+        total_obras = conn.query(query_obras).iloc[0, 0]
+        
+        # 2. Busca total de NOTAMs ativos
+        query_notams = "SELECT COUNT(*) FROM notams WHERE status = 'Vigente';"
+        total_notams = conn.query(query_notams).iloc[0, 0]
+        
+        # 3. Exemplo de cálculo de tempo médio (opcional)
+        # Se você tiver colunas de data_criacao e data_conclusao
+        # query_tempo = "SELECT AVG(data_fim - data_inicio) FROM registros;"
+        
+        return {
+            "obras": total_obras,
+            "notams": total_notams,
+            "tempo_medio": "4m" # Valor exemplo até você ter a coluna de tempo
+        }
+    except Exception as e:
+        st.error(f"Erro ao carregar dados do banco: {e}")
+        return {"obras": 0, "notams": 0, "tempo_medio": "0m"}
