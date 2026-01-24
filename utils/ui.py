@@ -62,7 +62,7 @@ def barra_superior():
             }}
             
             /* Ajuste de tamanho de texto e ícones do menu lateral */
-            [data-testid="stSidebarNav"] span {{ font-size: 1.15rem !important; }}
+            [data-testid="stSidebarNav"] span {{ font-size: 1.00rem !important; }}
             [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{ font-size: 1.5rem !important; }}
 
             /* 3. Ajuste do Conteúdo Principal */
