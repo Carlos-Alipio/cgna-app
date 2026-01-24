@@ -51,16 +51,20 @@ if not st.session_state['logado']:
             st.rerun()
         else: st.error("Erro nas credenciais.")
 else:
-    # A barra superior agora resolve o posicionamento do sidebar internamente
+    # --- USUÁRIO LOGADO ---
     ui.barra_superior() 
     ui.setup_sidebar()
 
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
-    pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
+    pg_obras = st.Page("pages/4-Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
     pg_config = st.Page("pages/Configuracoes.py", title="Ajustes", icon=":material/settings:")
 
-    pg = st.navigation([pg_home, pg_obras, pg_config])
+    pg = st.navigation({
+        "Navegação": [pg_home],
+        "Operacional": [pg_obras, pg_config]
+    })
 
+    # Este botão agora será movido para o rodapé automaticamente pelo CSS em ui.py
     if st.sidebar.button("Sair", icon=":material/logout:"):
         login_manager.realizar_logout(cookie_manager)
         st.session_state['logado'] = False
