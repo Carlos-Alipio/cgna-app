@@ -42,7 +42,7 @@ def barra_superior():
                 left: 0;
                 width: 100%;
                 height: 60px;
-                background-color: #0d6efd;
+                background-color: #FF7020;
                 z-index: 999999;
                 display: flex;
                 align-items: center;
