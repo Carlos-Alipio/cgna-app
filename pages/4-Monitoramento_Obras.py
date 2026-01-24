@@ -11,7 +11,6 @@ from utils import db_manager, formatters, timeline_processor, pdf_generator
 st.set_page_config(page_title="Gestão de Obras", layout="wide")
 st.title("🚨 Monitoramento & Cadastro de Obras")
 
-# CSS para alinhar botões à esquerda e dar destaque aos dados do NOTAM
 st.markdown("""
     <style>
     div[data-testid="column"] button {
@@ -20,13 +19,8 @@ st.markdown("""
     .stButton button {
         min-height: 45px;
     }
-    /* Estilo para o cartão de dados do NOTAM */
-    .notam-card {
-        background-color: #262730;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #41424C;
-        margin-bottom: 20px;
+    .bloco-ativo {
+        border: 2px solid #7C3AED !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -39,7 +33,6 @@ if 'notam_ativo' not in st.session_state: st.session_state.notam_ativo = None
 if 'cache_slots' not in st.session_state: st.session_state.cache_slots = [] 
 if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id = None 
 
-# Variáveis de UI
 if 'ui_ano' not in st.session_state: st.session_state.ui_ano = datetime.now().year
 if 'ui_mes_idx' not in st.session_state: st.session_state.ui_mes_idx = datetime.now().month - 1
 if 'ui_hora_ini' not in st.session_state: st.session_state.ui_hora_ini = time(8, 0)
@@ -55,22 +48,20 @@ if df_notams.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# Garante ID
 if 'id_notam' not in df_notams.columns:
     df_notams['loc'] = df_notams['loc'].astype(str)
     df_notams['n'] = df_notams['n'].astype(str)
     df_notams['id_notam'] = df_notams['loc'] + "_" + df_notams['n']
 
-# Filtros
 filtros_assunto = df_config[df_config['tipo'] == 'assunto']['valor'].tolist()
 filtros_condicao = df_config[df_config['tipo'] == 'condicao']['valor'].tolist()
+
 frota = db_manager.carregar_frota_monitorada()
 df_base = df_notams[df_notams['loc'].isin(frota)] if frota else df_notams
 mask_assunto = df_base['assunto_desc'].isin(filtros_assunto)
 mask_condicao = df_base['condicao_desc'].isin(filtros_condicao)
 df_critico = df_base[mask_assunto & mask_condicao].copy()
 
-# Limpeza
 ids_ativos = df_critico['id_notam'].unique().tolist()
 db_manager.limpar_registros_orfaos(ids_ativos)
 
@@ -166,7 +157,7 @@ tab_cadastro, tab_cronograma = st.tabs(["🛠️ Cadastro & Edição", "📅 Vis
 with tab_cadastro:
     col_notam, col_blocos, col_editor = st.columns([1.2, 1.2, 2.5])
 
-    # --- COLUNA 1: SELEÇÃO ---
+    # --- COLUNA 1: NOTAMS ---
     with col_notam:
         st.subheader("1. NOTAMs")
         df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy()
@@ -228,38 +219,30 @@ with tab_cadastro:
             else:
                 st.caption("Nenhum bloco cadastrado.")
 
-    # --- COLUNA 3: EDITOR (COM DADOS DO NOTAM) ---
+    # --- COLUNA 3: EDITOR ---
     with col_editor:
         if notam_selecionado is not None:
             
-            # --- NOVO: PAINEL DE DADOS DO NOTAM (B, C, D, E) ---
+            # --- PAINEL DE DADOS DO NOTAM ---
             st.markdown("##### 📖 Dados de Referência")
             with st.container(border=True):
-                # Linha 1: Início (B) e Fim (C)
                 c_b, c_c = st.columns(2)
                 with c_b:
-                    st.caption("Item B) Início da Validade")
+                    st.caption("B) Início")
                     st.markdown(f"**{notam_selecionado['b']}**")
                 with c_c:
-                    st.caption("Item C) Fim da Validade")
+                    st.caption("C) Fim")
                     st.markdown(f"**{notam_selecionado['c']}**")
                 
                 st.divider()
-                
-                # Linha 2: Item D (Horários Específicos)
-                st.caption("Item D) Horários Específicos (Schedule)")
-                d_text = str(notam_selecionado['d']) if not pd.isna(notam_selecionado['d']) and str(notam_selecionado['d']).strip() != '' else "⚠️ H24 / Não especificado"
-                if "H24" in d_text or "Não" in d_text:
-                    st.info(f"🕒 {d_text}")
-                else:
-                    st.warning(f"🕒 {d_text}") # Amarelo para chamar atenção que tem horário restrito
+                st.caption("D) Horários (Schedule)")
+                d_text = str(notam_selecionado['d']) if not pd.isna(notam_selecionado['d']) and str(notam_selecionado['d']).strip() != '' else "H24 / Não especificado"
+                st.info(f"🕒 {d_text}") if "H24" in d_text else st.warning(f"🕒 {d_text}")
 
-                # Linha 3: Texto Completo (E)
-                with st.expander("Item E) Texto Completo (Descrição)", expanded=False):
+                with st.expander("E) Texto Completo"):
                     st.code(notam_selecionado['e'], language="text")
 
-            # --- FIM DO PAINEL DE DADOS ---
-
+            # --- CALENDÁRIO ---
             modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
             st.subheader(f"3. Calendário ({modo})")
             
@@ -280,7 +263,6 @@ with tab_cadastro:
 
                 st.divider()
 
-                # Calendário
                 ano_atual = st.session_state.ui_ano
                 cal_matrix = calendar.monthcalendar(ano_atual, mes_idx)
                 cols_h = st.columns(7)
@@ -306,7 +288,7 @@ with tab_cadastro:
                 if st.session_state.editing_block_id:
                     st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
 
-    # --- LISTBOX DE ANÁLISE ---
+    # --- LISTBOX DE ANÁLISE (CORRIGIDO) ---
     st.divider()
     st.subheader("4. Análise Detalhada dos Slots")
     if st.session_state.cache_slots:
@@ -318,7 +300,15 @@ with tab_cadastro:
         df_analise['Hora Início'] = df_analise['start_dt'].dt.strftime('%H:%M')
         df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
         df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
-        df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').replace('Monday','SEG').replace('Tuesday','TER').replace('Wednesday','QUA').replace('Thursday','QUI').replace('Friday','SEX').replace('Saturday','SÁB').replace('Sunday','DOM').upper()
+        
+        # --- CORREÇÃO DO ERRO .upper() ---
+        # Usamos um dicionário para traduzir, sem chained .replace()
+        dias_map = {
+            'Monday': 'SEG', 'Tuesday': 'TER', 'Wednesday': 'QUA', 
+            'Thursday': 'QUI', 'Friday': 'SEX', 'Saturday': 'SÁB', 'Sunday': 'DOM'
+        }
+        # Obtém o nome em inglês e mapeia
+        df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').map(dias_map)
         
         df_analise = df_analise.sort_values('start_dt')
         st.dataframe(df_analise[['Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Dia Semana']], use_container_width=True, hide_index=True, height=300)
