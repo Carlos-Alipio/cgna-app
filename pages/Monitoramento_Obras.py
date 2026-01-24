@@ -81,7 +81,7 @@ def toggle_dia_callback(a, m, d):
     else: st.session_state.dias_selecionados.add(k)
 
 # ==============================================================================
-# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORREÇÃO TOTAL)
+# 1. CARREGAMENTO E TRATAMENTO DE DADOS (VERSÃO BLINDADA FINAL)
 # ==============================================================================
 # 1.1 Carrega dados brutos
 df_raw = db_manager.carregar_notams()
@@ -97,7 +97,7 @@ df_notams = df_raw.copy().reset_index(drop=True)
 mapeamento = {'icaoairport_id': 'loc', 'id': 'n'}
 df_notams = df_notams.rename(columns=mapeamento)
 
-# 1.4 Tratamento de Nulos (Essencial para evitar erros de texto)
+# 1.4 Tratamento de Nulos (Essencial)
 for col in ['loc', 'n', 'assunto_desc']:
     if col not in df_notams.columns:
         df_notams[col] = "N/I"
@@ -109,10 +109,9 @@ df_notams['id_notam'] = df_notams.apply(lambda x: f"{x['loc']}_{x['n']}", axis=1
 
 # 1.6 Filtragem (df_critico)
 # Adicione seus filtros de frota/assunto aqui se houver
-# Exemplo: df_critico = df_notams[df_notams['loc'].isin(frota)].copy()
-df_critico = df_notams.copy() 
+df_critico = df_notams.copy()
 
-# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO (AQUI ESTAVA O ERRO DA LINHA 125)
+# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO
 cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
 
 # Garante que as colunas existem
@@ -120,13 +119,15 @@ for col in cols_selecao:
     if col not in df_critico.columns:
         df_critico[col] = "N/I"
 
+# Cria o recorte
 df_sel = df_critico[cols_selecao].copy()
 
-# --- CORREÇÃO FINAL: Reseta o índice do df_sel antes de criar colunas ---
-df_sel = df_sel.reset_index(drop=True) 
+# --- A CORREÇÃO CRUCIAL (LINHA 129) ---
+# 1. Reseta o índice para garantir sequencia 0, 1, 2...
+df_sel = df_sel.reset_index(drop=True)
 
-# Agora a criação do Rótulo funciona porque o índice está limpo (0, 1, 2...)
-df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
+# 2. Usa .apply() para criar o Rótulo (Imune a erros de índice/vetorização)
+df_sel['Rotulo'] = df_sel.apply(lambda x: f"{x['loc']} {x['n']}", axis=1)
 
 # ==============================================================================
 # 2. INTERFACE (LAYOUT 1 - 3 - 1)
