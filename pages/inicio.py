@@ -8,13 +8,13 @@ def main():
     nome_usuario = st.session_state.get('usuario_atual', 'Carlos Alípio')
     stats = db_manager.buscar_estatisticas_dashboard()
 
-    st.title(f"👋 Bem-vindo, {nome_usuario}")
+    st.title(f"Bem-vindo, {nome_usuario}")
     st.info("Acesso autorizado ao painel operacional.")
 
     st.divider()
     st.subheader("📊 Resumo Operacional")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(3)
 
     with col1:
         # Alterado de 'Obras' para 'Aeroportos Monitorados'
@@ -32,13 +32,6 @@ def main():
             help="Volume total de NOTAMs carregados no sistema."
         )
 
-    with col3:
-        # Substitui o 'tempo_medio' pelos NOTAMs em Gestão
-        st.metric(
-            label="NOTAMs em Gestão", 
-            value=stats["em_gestao"],
-            help="NOTAMs que estão sendo acompanhados na Gestão de Obras."
-        )
 
     st.divider()
     
