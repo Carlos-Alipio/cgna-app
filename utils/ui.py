@@ -12,7 +12,7 @@ def barra_superior():
     st.markdown(f"""
         <div class="custom-navbar">
             <div class="nav-left">
-                <img src="assets/logo-voegol-new.svg" class="nav-logo">
+                <img src="/assets/logo-voegol-new.svg" class="nav-logo">
                 <span class="nav-brand">CGNA | GOL</span>
                 <span class="nav-user">👤 {nome_usuario}</span>
             </div>
