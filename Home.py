@@ -8,7 +8,7 @@ from utils import login_manager
 # Configuração da Página
 st.set_page_config(
     page_title="CGNA - GOL", 
-    page_icon="✈️", 
+    page_icon="assets/logo-voegol-new.svg", 
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
