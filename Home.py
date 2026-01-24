@@ -8,7 +8,8 @@ from utils import login_manager, ui
 st.set_page_config(
     page_title="CGNA - GOL", 
     page_icon="assets/logo-voegol-new.svg", 
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded" # <--- MUDANÇA AQUI: Inicia Aberto
 )
 
 cookie_manager = stx.CookieManager(key="main_auth_interface")

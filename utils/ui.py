@@ -5,7 +5,7 @@ def setup_sidebar():
     st.logo("assets/logo-voegol-new.svg")
 
 def barra_superior():
-    """Injeta a barra azul com Relógio UTC e ajusta o posicionamento do menu lateral."""
+    """Injeta a barra azul e garante que o botão do menu lateral seja acessível."""
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
     
     st.markdown(f"""
@@ -35,7 +35,7 @@ def barra_superior():
         </script>
 
         <style>
-            /* 1. Barra Superior Fixa */
+            /* 1. Barra Superior */
             .custom-navbar {{
                 position: fixed;
                 top: 0;
@@ -43,35 +43,38 @@ def barra_superior():
                 width: 100%;
                 height: 60px;
                 background-color: #0d6efd;
-                z-index: 9999999; /* Z-index altíssimo para ficar sobre tudo */
+                z-index: 999999;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 padding: 0 20px;
                 color: white;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                font-family: sans-serif;
             }}
-            
-            /* 2. RESOLUÇÃO: Empurra o Menu Lateral para baixo */
+
+            /* 2. RESOLUÇÃO DO MENU LATERAL */
+            /* Empurra o conteúdo do menu para baixo */
             [data-testid="stSidebar"] {{
                 padding-top: 60px !important;
             }}
-
-            /* 3. Empurra o Conteúdo Principal para baixo */
-            .main .block-container {{
-                padding-top: 85px !important;
+            
+            /* Move o botão de abrir/fechar para baixo da barra azul */
+            [data-testid="stHeader"] {{
+                top: 60px !important;
+                background-color: transparent !important;
+                z-index: 1000000 !important;
             }}
 
-            /* Estética dos itens da barra */
+            /* 3. Ajuste do Conteúdo Principal */
+            .main .block-container {{
+                padding-top: 90px !important;
+            }}
+
+            /* Estilo dos textos da barra */
             .nav-left {{ display: flex; align-items: center; }}
             .nav-brand {{ font-weight: 800; font-size: 1.1rem; }}
             .nav-user {{ margin-left: 20px; font-weight: 300; font-size: 0.85rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 20px; }}
             .clock {{ font-size: 1.2rem; font-weight: 700; }}
             .clock-label {{ font-size: 0.6rem; opacity: 0.8; letter-spacing: 1px; }}
-
-            /* Esconde cabeçalhos originais do Streamlit */
-            header {{ visibility: hidden; }}
-            [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
         </style>
     """, unsafe_allow_html=True)
