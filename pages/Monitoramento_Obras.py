@@ -81,47 +81,47 @@ def toggle_dia_callback(a, m, d):
     else: st.session_state.dias_selecionados.add(k)
 
 # ==============================================================================
-# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORRIGIDO)
+# 1. CARREGAMENTO E TRATAMENTO DE DADOS (VERSÃO BLINDADA)
 # ==============================================================================
-# 1.1 Carrega os dados brutos
+# 1.1 Carrega os dados do Supabase
 df_raw = db_manager.carregar_notams()
 
 if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# 1.2 FORÇAR CÓPIA INDEPENDENTE (Resolve o ValueError de 'view/slice')
-df_notams = df_raw.copy()
+# 1.2 Cria uma cópia profunda e limpa o índice imediatamente
+df_notams = df_raw.copy().reset_index(drop=True)
 
-# 1.3 MAPEAMENTO DE COLUNAS (Supabase -> Código)
-# 'icaoairport_id' vira 'loc' e 'id' vira 'n'
+# 1.3 Mapeamento de Colunas (Supabase -> Código)
 mapeamento = {
     'icaoairport_id': 'loc', 
     'id': 'n'
 }
 df_notams = df_notams.rename(columns=mapeamento)
 
-# 1.4 ALINHAMENTO DE ÍNDICE (Evita erro de tamanho/indexação)
-df_notams = df_notams.reset_index(drop=True)
-
-# 1.5 GARANTIR QUE COLUNAS EXISTAM (Evita KeyError)
+# 1.4 Garantia de existência de colunas e preenchimento de nulos
 for col in ['loc', 'n', 'assunto_desc']:
     if col not in df_notams.columns:
         df_notams[col] = "N/I"
+    else:
+        df_notams[col] = df_notams[col].fillna("N/I")
 
-# 1.6 CRIAÇÃO DO ID ÚNICO (Linha 110 corrigida)
-df_notams['id_notam'] = (
-    df_notams['loc'].astype(str) + "_" + df_notams['n'].astype(str)
-)
+# 1.5 CRIAÇÃO DO ID ÚNICO (Usando lista para ignorar erros de índice)
+# Esta é a forma mais segura de evitar o ValueError na linha 113
+ids_calculados = [
+    f"{str(l)}_{str(n)}" 
+    for l, n in zip(df_notams['loc'], df_notams['n'])
+]
+df_notams['id_notam'] = ids_calculados
 
-# 1.7 FILTRAGEM DOS DADOS (Criação do df_critico)
-# Aplique aqui os seus filtros de 'assunto_desc' e 'condicao_desc'
+# 1.6 FILTRAGEM (Criação do df_critico)
+# Aplique seus filtros aqui (assunto_desc, condicao_desc, etc.)
 df_critico = df_notams.copy()
 
-# 1.8 PREPARAÇÃO DA TABELA DE SELEÇÃO (Linha 98 dos erros anteriores)
-cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
-df_sel = df_critico[cols_selecao].copy()
-df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
+# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO
+df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy()
+df_sel['Rotulo'] = df_sel['loc'].astype(str) + " " + df_sel['n'].astype(str)
 
 # ==============================================================================
 # 2. INTERFACE (LAYOUT 1 - 3 - 1)
