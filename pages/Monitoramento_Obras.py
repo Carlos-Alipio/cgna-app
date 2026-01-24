@@ -242,7 +242,7 @@ with tab_cadastro:
             st.subheader(f"3. Calendário ({modo})")
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns(4)
-                c1.number_input("Ano", 2025, 2030, key="ui_ano")
+                c1.number_input("Ano", 2026, 2030, key="ui_ano")
                 mes_nomes = list(calendar.month_name)[1:]
                 sel_mes = c2.selectbox("Mês", mes_nomes, index=st.session_state.ui_mes_idx, key="widget_mes")
                 st.session_state.ui_mes_idx = mes_nomes.index(sel_mes)
