@@ -309,26 +309,26 @@ def carregar_notams():
         return pd.DataFrame()
 
 def buscar_estatisticas_dashboard():
-    """Busca as estatísticas filtradas para o Dashboard."""
-    # Usa a função que você já tem para carregar os dados brutos
-    df = carregar_notams() 
+    """Calcula as métricas solicitadas: Aeroportos, Total e Gestão."""
+    df = carregar_notams()
     
     if df.empty:
-        return {"aeroportos": 0, "total_geral": 0, "em_gestao": 0}
+        return {"aeroportos": 0, "total_notams": 0, "em_gestao": 0}
     
-    # 1. Aeroportos Monitorados: Localidades únicas
+    # 1. Aeroportos Monitorados (Únicos na coluna icaoairport_id)
     total_aeroportos = df['icaoairport_id'].nunique()
     
-    # 2. NOTAMs Totais: Volume total do banco
+    # 2. Total de NOTAMs na base
     total_geral = len(df)
     
-    # 3. NOTAMs em Gestão: Reflete a tabela de 'Cadastro de Obras'
-    # Se você usa algum filtro específico (ex: ativos), aplique aqui. 
-    # Caso contrário, ele conta o total que você gerencia na tela de obras.
-    total_gestao = len(df) 
+    # 3. NOTAMs em Gestão (Equivalente ao df_critico do seu monitoramento_obras.py)
+    # Aqui você pode aplicar o mesmo filtro que usa na tela de obras
+    # Se 'df_critico' for apenas o df completo filtrado, contamos aqui:
+    total_gestao = len(df) # Ajuste o filtro aqui se houver uma regra de 'crítico'
     
     return {
         "aeroportos": total_aeroportos,
-        "total_geral": total_geral,
+        "total_notams": total_geral,
         "em_gestao": total_gestao
     }
+
