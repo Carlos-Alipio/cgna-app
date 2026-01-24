@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import text
 from datetime import datetime, timedelta
+import json
+import os
+from datetime import datetime
 
 # --- CONEXÃO CENTRALIZADA ---
 def get_connection():
@@ -208,10 +211,7 @@ def limpar_registros_orfaos(lista_ids_ativos):
     # Exemplo SQL: DELETE FROM notam_obras_slots WHERE notam_id NOT IN (lista_ids_ativos)
     pass
 
-import json
-import os
-import pandas as pd
-from datetime import datetime
+
 
 # Arquivo onde os dados serão salvos
 DB_FILE = "slots_db.json"
@@ -298,3 +298,36 @@ def buscar_estatisticas_dashboard():
         # Se as tabelas ainda não estiverem prontas, o app mostra o aviso mas não trava
         st.warning(f"Configure as tabelas no Supabase para ver dados reais. Erro: {e}")
         return {"obras": 0, "notams": 0, "tempo_medio": "0m"}
+
+def carregar_notams():
+    """Busca todos os NOTAMs do banco."""
+    conn = st.connection("supabase", type="sql")
+    try:
+        # Busca a tabela completa como no seu código original
+        return conn.query('SELECT * FROM notams', ttl=0)
+    except:
+        return pd.DataFrame()
+
+def buscar_estatisticas_dashboard():
+    """Calcula as métricas solicitadas: Aeroportos, Total e Gestão."""
+    df = carregar_notams()
+    
+    if df.empty:
+        return {"aeroportos": 0, "total_notams": 0, "em_gestao": 0}
+    
+    # 1. Aeroportos Monitorados (Únicos na coluna icaoairport_id)
+    total_aeroportos = df['icaoairport_id'].nunique()
+    
+    # 2. Total de NOTAMs na base
+    total_geral = len(df)
+    
+    # 3. NOTAMs em Gestão (Equivalente ao df_critico do seu monitoramento_obras.py)
+    # Aqui você pode aplicar o mesmo filtro que usa na tela de obras
+    # Se 'df_critico' for apenas o df completo filtrado, contamos aqui:
+    total_gestao = len(df) # Ajuste o filtro aqui se houver uma regra de 'crítico'
+    
+    return {
+        "aeroportos": total_aeroportos,
+        "total_notams": total_geral,
+        "em_gestao": total_gestao
+    }

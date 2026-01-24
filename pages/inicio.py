@@ -3,66 +3,54 @@ from utils import ui
 from utils import db_manager
 
 def main():
-    # 1. Injeta a barra superior personalizada (Laranja #FF7020)
     ui.barra_superior()
-
-    # 2. Recupera informações de contexto
-    nome_usuario = st.session_state.get('usuario_atual', 'Carlos Alípio')
     
-    # 3. Busca os dados reais do Supabase via db_manager
+    nome_usuario = st.session_state.get('usuario_atual', 'Carlos Alípio')
     stats = db_manager.buscar_estatisticas_dashboard()
 
-    # --- CABEÇALHO ---
     st.title(f"👋 Bem-vindo, {nome_usuario}")
     st.info("Acesso autorizado ao painel operacional.")
 
     st.divider()
-
-    # --- SEÇÃO DE MÉTRICAS (KPIs) ---
-    st.subheader("📊 Visão Geral em Tempo Real")
+    st.subheader("📊 Resumo Operacional")
     
     col1, col2, col3 = st.columns(3)
 
     with col1:
+        # Alterado de 'Obras' para 'Aeroportos Monitorados'
         st.metric(
-            label="Obras em Monitoramento", 
-            value=stats["obras"], 
-            help="Total de obras com status 'Ativo' no banco de dados."
+            label="Aeroportos Monitorados", 
+            value=stats["aeroportos"],
+            help="Quantidade de localidades únicas com NOTAMs registrados."
         )
 
     with col2:
-        # Exemplo de delta fixo (pode ser automatizado futuramente)
+        # Total de NOTAMs na base de dados
         st.metric(
-            label="NOTAMs Ativos", 
-            value=stats["notams"], 
-            delta="-2", 
-            help="Quantidade de NOTAMs vigentes capturados pelo sistema."
+            label="Total de NOTAMs", 
+            value=stats["total_notams"],
+            help="Volume total de NOTAMs carregados no sistema."
         )
 
     with col3:
-        # O valor "4m" é mantido como exemplo até a função de tempo ser implementada
+        # Substitui o 'tempo_medio' pelos NOTAMs em Gestão
         st.metric(
-            label="Tempo Médio de Cadastro", 
-            value=stats["tempo_medio"], 
-            delta="15s",
-            delta_color="inverse", # Vermelho se aumentar, pois tempo maior é pior
-            help="Média de tempo entre a abertura e fechamento dos processos."
+            label="NOTAMs em Gestão", 
+            value=stats["em_gestao"],
+            help="NOTAMs que estão sendo acompanhados na Gestão de Obras."
         )
 
     st.divider()
-
-    # --- SEÇÃO DE GRÁFICO ---
-    st.subheader("📈 Tendência de Atividade (NOTAMs)")
     
-    # Exemplo de dados para o gráfico usando a cor da GOL
-    chart_data = {
-        "Dias": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"],
-        "Processados": [12, 18, 15, 25, 22, 10, 14]
-    }
-    st.line_chart(chart_data, x="Dias", y="Processados", color="#FF7020")
+    # Dica visual: O gráfico agora pode mostrar a proporção de NOTAMs por Aeroporto
+    st.subheader("📈 Distribuição por Localidade")
+    df = db_manager.carregar_notams()
+    if not df.empty:
+        # Agrupa por aeroporto para o gráfico
+        chart_data = df['icaoairport_id'].value_counts()
+        st.bar_chart(chart_data, color="#FF7020")
 
-    # --- RODAPÉ INFORMATIVO ---
-    st.caption("ℹ️ Utilize o menu à esquerda para navegar entre as ferramentas de gestão e monitoramento.")
+    st.caption("ℹ️ Utilize o menu 'Gestão de Obras' para detalhar os itens monitorados.")
 
 if __name__ == "__main__":
     main()
