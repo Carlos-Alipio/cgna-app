@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import hashlib
 from sqlalchemy import text
-import extra_streamlit_components as stx # <--- IMPORTANTE
+import extra_streamlit_components as stx
 from utils import login_manager
 
 # Configuração da Página
