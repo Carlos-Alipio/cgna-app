@@ -14,7 +14,7 @@ def main():
     st.divider()
     st.subheader("📊 Resumo Operacional")
     
-    col1, col2 = st.columns(3)
+    col1, col2 = st.columns(2)
 
     with col1:
         # Alterado de 'Obras' para 'Aeroportos Monitorados'
