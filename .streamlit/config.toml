@@ -1,15 +1,6 @@
 [theme]
-# Cor principal (Botões, sliders, links) - Um roxo vibrante
-primaryColor = "#6C63FF"
-
-# Cor de fundo da área principal - Cinza bem escuro
-backgroundColor = "rgb(36, 32, 30)"
-
-# Cor de fundo da barra lateral - Um pouco mais claro que o fundo
-secondaryBackgroundColor = "#262730"
-
-# Cor do texto - Quase branco para dar contraste
-textColor = "#FAFAFA"
-
-# Fonte (opções: "sans serif", "serif", "monospace")
+primaryColor = "#0d6efd"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#212529"
 font = "sans serif"
