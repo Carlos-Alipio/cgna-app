@@ -83,37 +83,35 @@ def toggle_dia_callback(a, m, d):
 # ==============================================================================
 # 1. CARREGAMENTO E TRATAMENTO DE DADOS
 # ==============================================================================
-df_notams = db_manager.carregar_notams()
+# Carrega os dados brutos do db_manager
+df_raw = db_manager.carregar_notams()
 
-if df_notams.empty:
+if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
+# CRIAÇÃO DE UMA CÓPIA LIMPA (Evita ValueError de visualização/slice)
+df_notams = df_raw.copy()
+
 # MAPEAMENTO DE COLUNAS (Supabase -> Código)
-# Ajusta os nomes das colunas vindas do banco para o que o código espera
 mapeamento = {
     'icaoairport_id': 'loc', 
     'id': 'n'
 }
 df_notams = df_notams.rename(columns=mapeamento)
 
-# Verificação de segurança: Garante que colunas essenciais existam
-colunas_obrigatorias = ['loc', 'n', 'assunto_desc', 'condicao_desc']
-for col in colunas_obrigatorias:
+# GARANTIR QUE AS COLUNAS EXISTAM (Evita KeyError posterior)
+for col in ['loc', 'n', 'assunto_desc']:
     if col not in df_notams.columns:
-        # Cria a coluna vazia se não existir para evitar o KeyError
-        df_notams[col] = "Não informado"
+        df_notams[col] = "N/I"
 
-# Criação do ID único para o sistema
+# LINHA 108 CORRIGIDA: Criação do ID único com reset de índice preventivo
+df_notams = df_notams.reset_index(drop=True)
 df_notams['id_notam'] = df_notams['loc'].astype(str) + "_" + df_notams['n'].astype(str)
 
 # --- FILTRAGEM (df_critico) ---
-# (Mantenha sua lógica de filtros aqui)
-df_critico = df_notams.copy() 
-
-# Verificação final antes da linha 98
-cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
-df_sel = df_critico[cols_selecao].copy() # Linha 98 corrigida
+# Aplique seus filtros aqui (assunto_desc, condicao_desc, etc.)
+df_critico = df_notams.copy()
 
 # ==============================================================================
 # 2. INTERFACE (LAYOUT 1 - 3 - 1)
