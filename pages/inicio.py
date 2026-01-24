@@ -14,43 +14,33 @@ def main():
     st.divider()
     st.subheader("📊 Resumo Operacional")
     
-    col1, col2, col3 = st.columns(3)
+    # Usaremos duas colunas largas para dar destaque aos números totais
+    col1, col2 = st.columns(2)
 
     with col1:
-        # Alterado de 'Obras' para 'Aeroportos Monitorados'
+        # Substituído pelo total sem filtros conforme solicitado
         st.metric(
-            label="Aeroportos Monitorados", 
-            value=stats["aeroportos"],
-            help="Quantidade de localidades únicas com NOTAMs registrados."
+            label="NOTAMs Totais", 
+            value=stats["total_geral"],
+            help="Soma total de todos os NOTAMs registrados na base de dados, sem filtros."
         )
 
     with col2:
-        # Total de NOTAMs na base de dados
         st.metric(
-            label="Total de NOTAMs", 
-            value=stats["total_notams"],
-            help="Volume total de NOTAMs carregados no sistema."
-        )
-
-    with col3:
-        # Substitui o 'tempo_medio' pelos NOTAMs em Gestão
-        st.metric(
-            label="NOTAMs em Gestão", 
-            value=stats["em_gestao"],
-            help="NOTAMs que estão sendo acompanhados na Gestão de Obras."
+            label="Aeroportos Monitorados", 
+            value=stats["aeroportos"],
+            help="Quantidade de localidades distintas (ICAOs) presentes no banco."
         )
 
     st.divider()
     
-    # Dica visual: O gráfico agora pode mostrar a proporção de NOTAMs por Aeroporto
-    st.subheader("📈 Distribuição por Localidade")
+    # Visualização de distribuição para complementar o total
+    st.subheader("📈 NOTAMs por Aeroporto")
     df = db_manager.carregar_notams()
     if not df.empty:
-        # Agrupa por aeroporto para o gráfico
-        chart_data = df['icaoairport_id'].value_counts()
+        # Mostra os 10 aeroportos com mais NOTAMs para não poluir a tela
+        chart_data = df['icaoairport_id'].value_counts().head(10)
         st.bar_chart(chart_data, color="#FF7020")
-
-    st.caption("ℹ️ Utilize o menu 'Gestão de Obras' para detalhar os itens monitorados.")
 
 if __name__ == "__main__":
     main()

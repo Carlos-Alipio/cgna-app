@@ -331,3 +331,23 @@ def buscar_estatisticas_dashboard():
         "total_notams": total_geral,
         "em_gestao": total_gestao
     }
+
+
+def buscar_estatisticas_dashboard():
+    """Calcula as métricas: Total Absoluto e Aeroportos Únicos."""
+    # Sua função original que busca todos os registros sem filtro
+    df = carregar_notams() 
+    
+    if df.empty:
+        return {"total_geral": 0, "aeroportos": 0}
+    
+    # 1. NOTAMs Totais: Contagem total de linhas na tabela
+    total_geral = len(df)
+    
+    # 2. Aeroportos Monitorados: Baseado na coluna icaoairport_id
+    total_aeroportos = df['icaoairport_id'].nunique()
+    
+    return {
+        "total_geral": total_geral,
+        "aeroportos": total_aeroportos
+    }
