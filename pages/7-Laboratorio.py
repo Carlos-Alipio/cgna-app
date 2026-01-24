@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+from utils import ui
 
 # Importações do seu projeto
 from utils import db_manager
@@ -10,6 +11,7 @@ from utils.parser_notam import interpretar_periodo_atividade
 from utils.casos_reais import CASOS_BLINDADOS
 
 st.set_page_config(page_title="Laboratório de Regressão", layout="wide", page_icon="🧪")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 st.title("🧪 Laboratório & Diagnóstico")
 st.markdown("Ferramenta de validação de integridade do parser e auditoria de dados do Supabase.")

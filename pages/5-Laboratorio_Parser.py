@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils import parser_notam, casos_reais
+from utils import ui
 
 st.set_page_config(page_title="Lab Parser Blindado", layout="wide")
-
 st.title("🛡️ Laboratório com Regressão Automática")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 # ==============================================================================
 # 0. FUNÇÃO AUXILIAR DE CONVERSÃO DE INPUT (ATUALIZADA PARA PERM)

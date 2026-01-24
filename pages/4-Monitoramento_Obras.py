@@ -4,12 +4,14 @@ import calendar
 import uuid
 from datetime import datetime, time, timedelta
 from utils import db_manager, formatters, timeline_processor, pdf_generator
+from utils import ui
 
 # ==============================================================================
 # CONFIGURAÇÃO E ESTILIZAÇÃO
 # ==============================================================================
 st.set_page_config(page_title="Gestão de Obras", layout="wide")
 st.title("🚨 Monitoramento & Cadastro de Obras")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 st.markdown("""
     <style>

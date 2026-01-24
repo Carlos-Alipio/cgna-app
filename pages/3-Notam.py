@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
+from utils import ui
 
 # Importando módulos da pasta utils
 from utils import db_manager, api_decea, formatters
 
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
 st.title("✈️ Monitoramento de NOTAMs")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:

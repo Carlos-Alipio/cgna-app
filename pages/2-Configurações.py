@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from sqlalchemy import text
+from utils import ui
 
 # Importando módulos da pasta utils
 from utils import db_manager
@@ -8,6 +9,7 @@ from utils.notam_codes import NOTAM_SUBJECT, NOTAM_CONDITION
 
 st.set_page_config(page_title="Configurações", layout="wide")
 st.title("⚙️ Configurações do Sistema")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:

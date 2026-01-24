@@ -3,13 +3,14 @@ import pandas as pd
 from utils import parser_notam
 # Importe aqui o arquivo onde você guardou a função get_connection
 # Se estiver em utils/database.py, use: from utils.database import get_connection
-from utils.db_manager import get_connection 
+from utils.db_manager import get_connection
+from utils import ui
 
 st.set_page_config(page_title="Processamento Supabase", layout="wide")
-
 st.title("📊 Processamento em Lote (Via SQL)")
 st.markdown("Busca no Banco de Dados todos os NOTAMs com **Item D** preenchido e processa os horários.")
-
+ui.setup_sidebar() # <--- Chama o logo aqui
+ 
 # ==============================================================================
 # 1. ALGORITMO DE BUSCA E PROCESSAMENTO
 # ==============================================================================

@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
+from utils import ui
 
 st.title("📈 Visão Geral")
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 # --- 🔒 BLOCO DE SEGURANÇA (COLE ISSO NO TOPO DAS PÁGINAS) ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
