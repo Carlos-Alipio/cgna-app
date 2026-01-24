@@ -29,7 +29,7 @@ def barra_superior():
         <div class="custom-navbar">
             <div class="nav-left">
                 <img src="{img_src}" class="nav-logo">
-                <span class="nav-brand">CGNA | GOL</span>
+                <span class="nav-brand">CGNA</span>
                 <span class="nav-user">👤 {nome_usuario}</span>
             </div>
             <div class="nav-right">
