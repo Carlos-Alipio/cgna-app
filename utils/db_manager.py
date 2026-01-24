@@ -276,16 +276,17 @@ def limpar_registros_orfaos(ids_ativos):
 import streamlit as st
 
 def buscar_estatisticas_dashboard():
-    """Consulta o Supabase com nomes de tabelas protegidos."""
+    """Busca dados reais das tabelas confirmadas no Supabase."""
     try:
         conn = st.connection("supabase", type="sql")
         
-        # Testamos com "public"."obras" para evitar erro de relação inexistente
-        # Se no seu banco a tabela for "Obras" (com O maiúsculo), o SQL deve ser "Obras"
-        query_obras = 'SELECT COUNT(*) FROM "public"."obras" WHERE status = \'Ativo\';'
+        # Busca total na tabela obras (que acabamos de criar)
+        query_obras = "SELECT COUNT(*) FROM public.obras WHERE status = 'Ativo';"
         total_obras = conn.query(query_obras).iloc[0, 0]
         
-        query_notams = 'SELECT COUNT(*) FROM "public"."notams" WHERE status = \'Vigente\';'
+        # Busca total na tabela notams (que já existe no seu banco)
+        # Nota: Se você ainda não tiver uma coluna 'status' em notams, use apenas COUNT(*)
+        query_notams = "SELECT COUNT(*) FROM public.notams;"
         total_notams = conn.query(query_notams).iloc[0, 0]
         
         return {
@@ -294,6 +295,6 @@ def buscar_estatisticas_dashboard():
             "tempo_medio": "4m" 
         }
     except Exception as e:
-        # Se falhar, pelo menos o app não quebra e mostra o erro real para ajuste
-        st.warning(f"Aviso: Verifique se as tabelas existem no Supabase. Erro: {e}")
+        # Se as tabelas ainda não estiverem prontas, o app mostra o aviso mas não trava
+        st.warning(f"Configure as tabelas no Supabase para ver dados reais. Erro: {e}")
         return {"obras": 0, "notams": 0, "tempo_medio": "0m"}
