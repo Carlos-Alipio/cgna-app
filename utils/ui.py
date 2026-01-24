@@ -7,7 +7,7 @@ def setup_sidebar():
     pass
 
 def get_base64_bin(file_path):
-    """Converte arquivo local para base64 para uso em HTML."""
+    """Converte o logo local para base64 para o HTML."""
     try:
         if os.path.exists(file_path):
             with open(file_path, "rb") as f:
@@ -18,12 +18,9 @@ def get_base64_bin(file_path):
     return ""
 
 def barra_superior():
-    """Barra laranja #FF7020 corrigindo a sobreposição de ícones do Streamlit."""
+    """Injeta a barra laranja e o botão de menu exatamente onde foi solicitado (X vermelho)."""
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
-    
-    # Processamento do Logo GOL
-    logo_path = "assets/logo-voegol-new.svg"
-    logo_b64 = get_base64_bin(logo_path)
+    logo_b64 = get_base64_bin("assets/logo-voegol-new.svg")
     img_src = f"data:image/svg+xml;base64,{logo_b64}" if logo_b64 else ""
 
     st.markdown(f"""
@@ -54,7 +51,7 @@ def barra_superior():
         </script>
 
         <style>
-            /* 1. BARRA SUPERIOR CUSTOMIZADA */
+            /* 1. BARRA SUPERIOR LARANJA #FF7020 */
             .custom-navbar {{
                 position: fixed;
                 top: 0; left: 0; width: 100%; height: 60px;
@@ -71,37 +68,40 @@ def barra_superior():
             .clock {{ font-size: 1.1rem; font-weight: 700; }}
             .clock-label {{ font-size: 0.55rem; opacity: 0.8; letter-spacing: 0.5px; }}
 
-            /* 2. LIMPEZA E AJUSTE DOS ÍCONES NATIVOS DO STREAMLIT */
-            
-            /* Reposiciona apenas o botão de abrir/fechar o menu para não cobrir o logo */
+            /* 2. O BOTÃO DO MENU (POSIÇÃO DO X VERMELHO) */
             [data-testid="stHeader"] {{
-                background-color: transparent !important;
-                left: 240px !important; /* Move a seta para depois do texto 'CGNA | GOL' */
+                position: fixed !important;
+                top: 70px !important; /* Logo abaixo da barra de 60px */
+                left: 15px !important; /* No canto esquerdo conforme o seu X */
                 width: 45px !important;
-                height: 60px !important;
+                height: 45px !important;
+                background-color: white !important; /* Fundo branco para destaque */
+                border-radius: 50% !important; /* Formato circular profissional */
+                box-shadow: 0 2px 10px rgba(0,0,0,0.15) !important;
                 z-index: 10000000 !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
             }}
-
-            /* Deixa a seta branca */
+            
+            /* Ajusta a cor do ícone da seta/hambúrguer para cinza escuro */
             [data-testid="stHeader"] svg {{
-                fill: white !important;
+                fill: #444 !important;
+                width: 24px !important;
+                height: 24px !important;
             }}
 
-            /* ESCONDE os outros ícones (Share, Star, GitHub, etc.) para limpar a barra */
+            /* Esconde os botões inúteis (Share, Star) que poluem a barra laranja */
             [data-testid="stHeader"] > div:last-child {{
                 display: none !important;
             }}
 
-            /* 3. CUSTOMIZAÇÃO DO MENU LATERAL */
+            /* 3. MENU LATERAL E CONTEÚDO */
             [data-testid="stSidebar"] {{ padding-top: 60px !important; }}
-            [data-testid="stSidebarNav"] span {{ font-size: 1.0rem !important; font-weight: 500 !important; }}
-            [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{ font-size: 1.25rem !important; }}
-            [data-testid="stSidebarNav"] li {{ margin-bottom: 12px !important; }}
+            [data-testid="stSidebarNav"] span {{ font-size: 1.0rem !important; }}
+            [data-testid="stSidebarNav"] li {{ margin-bottom: 6px !important; }}
 
-            /* 4. BOTÃO SAIR NO RODAPÉ CENTRALIZADO */
+            /* Botão Sair no Rodapé */
             [data-testid="stSidebarContent"] {{ display: flex; flex-direction: column; height: 100vh; }}
             [data-testid="stSidebarNav"] {{ flex-grow: 1; }}
             div.stSidebar [data-testid="stVerticalBlock"] > div:last-child {{
@@ -110,8 +110,7 @@ def barra_superior():
             }}
             div.stSidebar [data-testid="stVerticalBlock"] > div:last-child button {{ width: 85% !important; }}
 
-            /* 5. AJUSTES GERAIS */
-            .main .block-container {{ padding-top: 100px !important; }}
-            header {{ visibility: visible !important; }}
+            /* Padding do conteúdo principal */
+            .main .block-container {{ padding-top: 110px !important; }}
         </style>
     """, unsafe_allow_html=True)
