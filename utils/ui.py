@@ -1,18 +1,34 @@
 import streamlit as st
+import base64
+import os
 
 def setup_sidebar():
-    """Menu lateral limpo, sem o logo que foi para a barra superior."""
-    # st.logo foi removido daqui para evitar duplicidade
+    """Menu lateral limpo."""
     pass
 
+def get_base64_bin(file_path):
+    """Converte arquivo local para base64 para uso em HTML."""
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return ""
+
 def barra_superior():
-    """Barra horizontal laranja com Logo, Nome e Relógio UTC."""
+    """Barra horizontal laranja com Logo Base64 e Relógio UTC."""
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
     
+    # Busca o logo localmente e converte
+    logo_path = "assets/logo-voegol-new.svg"
+    logo_base64 = get_base64_bin(logo_path)
+    
+    # Se o arquivo existir, monta a string src, senão usa um placeholder
+    img_src = f"data:image/svg+xml;base64,{logo_base64}" if logo_base64 else ""
+
     st.markdown(f"""
         <div class="custom-navbar">
             <div class="nav-left">
-                <img src="/assets/logo-voegol-new.svg" class="nav-logo">
+                <img src="{img_src}" class="nav-logo">
                 <span class="nav-brand">CGNA | GOL</span>
                 <span class="nav-user">👤 {nome_usuario}</span>
             </div>
@@ -37,14 +53,13 @@ def barra_superior():
         </script>
 
         <style>
-            /* 1. Barra Superior com a nova cor #FF7020 */
             .custom-navbar {{
                 position: fixed;
                 top: 0;
                 left: 0;
                 width: 100%;
                 height: 60px;
-                background-color: #FF7020; /* Cor Laranja solicitada */
+                background-color: #FF7020;
                 z-index: 9999999;
                 display: flex;
                 align-items: center;
@@ -55,22 +70,19 @@ def barra_superior():
                 font-family: sans-serif;
             }}
             
-            /* Estilo do Logo na Barra */
             .nav-logo {{
-                height: 30px;
+                height: 35px; /* Aumentado levemente para melhor visualização */
                 margin-right: 15px;
-                filter: brightness(0) invert(1); /* Deixa o logo branco para contrastar com o laranja */
+                filter: brightness(0) invert(1); /* Mantém o logo branco */
             }}
 
             .nav-left {{ display: flex; align-items: center; }}
             .nav-brand {{ font-weight: 800; font-size: 1.1rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 15px; }}
             .nav-user {{ margin-left: 15px; font-weight: 300; font-size: 0.85rem; opacity: 0.9; }}
-            
             .nav-right {{ text-align: right; line-height: 1.1; }}
             .clock {{ font-size: 1.2rem; font-weight: 700; }}
             .clock-label {{ font-size: 0.6rem; opacity: 0.8; letter-spacing: 0.5px; }}
 
-            /* Ajustes de Layout Streamlit */
             [data-testid="stSidebar"] {{ padding-top: 60px !important; }}
             .main .block-container {{ padding-top: 90px !important; }}
             header {{ visibility: hidden; }}
