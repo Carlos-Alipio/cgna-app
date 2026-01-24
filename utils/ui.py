@@ -32,7 +32,7 @@ def barra_superior():
             </div>
             <div class="nav-right">
                 <div id="utc-clock" class="clock">00:00:00 UTC</div>
-                <div class="clock-label">Tempo Universal Coordenado</div>
+                <div class="clock-label">UTC</div>
             </div>
         </div>
 
