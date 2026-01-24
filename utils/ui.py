@@ -83,7 +83,7 @@ def barra_superior():
 
             /* 2. AJUSTE DO MENU LATERAL (Texto e Ícones Maiores) */
             [data-testid="stSidebarNav"] span {{
-                font-size: 1.15rem !important;
+                font-size: 1.05rem !important;
                 font-weight: 500 !important;
             }}
             [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{
