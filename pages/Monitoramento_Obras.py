@@ -248,7 +248,7 @@ with tab_cadastro:
 
                 with st.expander("E) Texto Completo"):
                     st.code(notam_selecionado['e'], language="text")
-                    st.info(f"🕒 {notam_selecionado['e']}")
+                    st.info(f"{notam_selecionado['e']}")
 
             # --- CALENDÁRIO ---
             modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
