@@ -246,6 +246,8 @@ with tab_cadastro:
                 else:
                     st.warning(f"🕒 {d_text}")
 
+                st.divider()
+                
                 st.caption("E) Texto do Notam:")
                 st.info(f"{notam_selecionado['e']}")
 
