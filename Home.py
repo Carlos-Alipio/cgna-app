@@ -23,7 +23,7 @@ pg_obras = st.Page("pages/4-Monitoramento_Obras.py", title="Gestão de Obras", i
 pg_config = st.Page("pages/Configurações.py", title="Ajustes", icon=":material/settings:")
 
 # 2. Crie a navegação
-pg = st.navigation([pg_home, pg_obras, pg_config])
+pg = st.navigation([pg_home, pg_Notam, pg_obras, pg_config])
 
 # 3. Execute
 st.set_page_config(page_title="Gerenciador CGNA", page_icon=":material/flight_takeoff:")
