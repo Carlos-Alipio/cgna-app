@@ -18,7 +18,7 @@ def get_base64_bin(file_path):
     return ""
 
 def barra_superior():
-    """Barra laranja #FF7020 com correção da posição da seta de colapso."""
+    """Barra laranja #FF7020 corrigindo a sobreposição de ícones do Streamlit."""
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
     
     # Processamento do Logo GOL
@@ -54,7 +54,7 @@ def barra_superior():
         </script>
 
         <style>
-            /* 1. Barra Superior Laranja */
+            /* 1. BARRA SUPERIOR CUSTOMIZADA */
             .custom-navbar {{
                 position: fixed;
                 top: 0; left: 0; width: 100%; height: 60px;
@@ -65,70 +65,53 @@ def barra_superior():
                 box-shadow: 0 2px 8px rgba(0,0,0,0.2);
                 font-family: sans-serif;
             }}
-            
             .nav-logo {{ height: 30px; margin-right: 15px; filter: brightness(0) invert(1); }}
             .nav-brand {{ font-weight: 800; font-size: 1.0rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 15px; }}
             .nav-user {{ margin-left: 15px; font-weight: 300; font-size: 0.8rem; opacity: 0.9; }}
             .clock {{ font-size: 1.1rem; font-weight: 700; }}
             .clock-label {{ font-size: 0.55rem; opacity: 0.8; letter-spacing: 0.5px; }}
 
-            /* 2. RESOLUÇÃO DA SETA (CHEVRON) SOBRE O LOGO */
-            /* Movemos o cabeçalho (onde fica a seta) para a direita do texto da marca */
+            /* 2. LIMPEZA E AJUSTE DOS ÍCONES NATIVOS DO STREAMLIT */
+            
+            /* Reposiciona apenas o botão de abrir/fechar o menu para não cobrir o logo */
             [data-testid="stHeader"] {{
                 background-color: transparent !important;
-                left: 220px !important; /* Move a seta para a direita do 'CGNA | GOL' */
-                top: 0px !important;
-                z-index: 10000000 !important; /* Garante que fique clicável sobre a barra */
-                width: fit-content !important;
+                left: 240px !important; /* Move a seta para depois do texto 'CGNA | GOL' */
+                width: 45px !important;
+                height: 60px !important;
+                z-index: 10000000 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }}
-            
-            /* Deixa a seta branca para combinar com a barra */
+
+            /* Deixa a seta branca */
             [data-testid="stHeader"] svg {{
                 fill: white !important;
             }}
 
-            /* 3. Customização do Menu Lateral */
-            [data-testid="stSidebar"] {{ padding-top: 60px !important; }}
-            
-            [data-testid="stSidebarNav"] span {{
-                font-size: 1.0rem !important;
-                font-weight: 400 !important;
-            }}
-            
-            [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{
-                font-size: 1.25rem !important;
+            /* ESCONDE os outros ícones (Share, Star, GitHub, etc.) para limpar a barra */
+            [data-testid="stHeader"] > div:last-child {{
+                display: none !important;
             }}
 
-            /* Espaçamento de 12px entre itens */
-            [data-testid="stSidebarNav"] li {{
-                margin-bottom: 12px !important;
-            }}
+            /* 3. CUSTOMIZAÇÃO DO MENU LATERAL */
+            [data-testid="stSidebar"] {{ padding-top: 60px !important; }}
+            [data-testid="stSidebarNav"] span {{ font-size: 1.0rem !important; font-weight: 500 !important; }}
+            [data-testid="stSidebarNav"] span[data-testid="stIconMaterial"] {{ font-size: 1.25rem !important; }}
+            [data-testid="stSidebarNav"] li {{ margin-bottom: 12px !important; }}
 
             /* 4. BOTÃO SAIR NO RODAPÉ CENTRALIZADO */
-            [data-testid="stSidebarContent"] {{
-                display: flex;
-                flex-direction: column;
-                height: 100vh;
-            }}
-
-            [data-testid="stSidebarNav"] {{
-                flex-grow: 1;
-            }}
-
+            [data-testid="stSidebarContent"] {{ display: flex; flex-direction: column; height: 100vh; }}
+            [data-testid="stSidebarNav"] {{ flex-grow: 1; }}
             div.stSidebar [data-testid="stVerticalBlock"] > div:last-child {{
-                margin-top: auto;
-                padding: 20px 10px;
-                display: flex;
-                justify-content: center;
+                margin-top: auto; padding: 20px 10px; display: flex; justify-content: center;
                 border-top: 1px solid rgba(0,0,0,0.05);
             }}
-            
-            div.stSidebar [data-testid="stVerticalBlock"] > div:last-child button {{
-                width: 85% !important;
-            }}
+            div.stSidebar [data-testid="stVerticalBlock"] > div:last-child button {{ width: 85% !important; }}
 
-            /* 5. Ajustes de Tela */
+            /* 5. AJUSTES GERAIS */
             .main .block-container {{ padding-top: 100px !important; }}
-            header {{ visibility: visible !important; }} /* Garante visibilidade da seta */
+            header {{ visibility: visible !important; }}
         </style>
     """, unsafe_allow_html=True)
