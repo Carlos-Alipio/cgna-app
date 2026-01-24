@@ -56,7 +56,7 @@ else:
     ui.setup_sidebar()
 
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
-    pg_obras = st.Page("pages/4-Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
+    pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
     pg_config = st.Page("pages/Configuracoes.py", title="Ajustes", icon=":material/settings:")
 
     pg = st.navigation({
