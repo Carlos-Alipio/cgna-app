@@ -6,4 +6,4 @@ def setup_sidebar():
     
     # OU Opção 2 (Grande)
     with st.sidebar:
-        st.image("assets/logo.png", width=250)
+        st.image("assets/logo-voegol-new.svg", width=250)
