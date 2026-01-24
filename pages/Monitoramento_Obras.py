@@ -81,37 +81,47 @@ def toggle_dia_callback(a, m, d):
     else: st.session_state.dias_selecionados.add(k)
 
 # ==============================================================================
-# 1. CARREGAMENTO E TRATAMENTO DE DADOS
+# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORRIGIDO)
 # ==============================================================================
-# Carrega os dados brutos do db_manager
+# 1.1 Carrega os dados brutos
 df_raw = db_manager.carregar_notams()
 
 if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# CRIAÇÃO DE UMA CÓPIA LIMPA (Evita ValueError de visualização/slice)
+# 1.2 FORÇAR CÓPIA INDEPENDENTE (Resolve o ValueError de 'view/slice')
 df_notams = df_raw.copy()
 
-# MAPEAMENTO DE COLUNAS (Supabase -> Código)
+# 1.3 MAPEAMENTO DE COLUNAS (Supabase -> Código)
+# 'icaoairport_id' vira 'loc' e 'id' vira 'n'
 mapeamento = {
     'icaoairport_id': 'loc', 
     'id': 'n'
 }
 df_notams = df_notams.rename(columns=mapeamento)
 
-# GARANTIR QUE AS COLUNAS EXISTAM (Evita KeyError posterior)
+# 1.4 ALINHAMENTO DE ÍNDICE (Evita erro de tamanho/indexação)
+df_notams = df_notams.reset_index(drop=True)
+
+# 1.5 GARANTIR QUE COLUNAS EXISTAM (Evita KeyError)
 for col in ['loc', 'n', 'assunto_desc']:
     if col not in df_notams.columns:
         df_notams[col] = "N/I"
 
-# LINHA 108 CORRIGIDA: Criação do ID único com reset de índice preventivo
-df_notams = df_notams.reset_index(drop=True)
-df_notams['id_notam'] = df_notams['loc'].astype(str) + "_" + df_notams['n'].astype(str)
+# 1.6 CRIAÇÃO DO ID ÚNICO (Linha 110 corrigida)
+df_notams['id_notam'] = (
+    df_notams['loc'].astype(str) + "_" + df_notams['n'].astype(str)
+)
 
-# --- FILTRAGEM (df_critico) ---
-# Aplique seus filtros aqui (assunto_desc, condicao_desc, etc.)
+# 1.7 FILTRAGEM DOS DADOS (Criação do df_critico)
+# Aplique aqui os seus filtros de 'assunto_desc' e 'condicao_desc'
 df_critico = df_notams.copy()
+
+# 1.8 PREPARAÇÃO DA TABELA DE SELEÇÃO (Linha 98 dos erros anteriores)
+cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
+df_sel = df_critico[cols_selecao].copy()
+df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
 
 # ==============================================================================
 # 2. INTERFACE (LAYOUT 1 - 3 - 1)
