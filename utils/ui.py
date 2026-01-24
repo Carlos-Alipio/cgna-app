@@ -5,43 +5,19 @@ def setup_sidebar():
     st.logo("assets/logo-voegol-new.svg")
 
 def barra_superior():
-    """Insere a barra horizontal com Relógio UTC em tempo real e Nome do Usuário."""
+    """Injeta a barra azul com o nome do usuário e o relógio UTC vivo."""
     nome_usuario = st.session_state.get('usuario_atual', 'Usuário')
     
+    # Usamos st.components para isolar o JS ou mantemos o markdown limpo
     st.markdown(f"""
-        <div style='
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 60px; 
-            background-color: #0d6efd; 
-            z-index: 999999; 
-            border-bottom: 3px solid #0a58ca; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between;
-            padding: 0 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            color: white;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;'>
-            
-            <div style='display: flex; align-items: center;'>
-                <span style='font-weight: 800; font-size: 1.2rem; letter-spacing: 1px;'>
-                    ✈️ CGNA | GOL
-                </span>
-                <span style='margin-left: 20px; font-weight: 300; font-size: 0.9rem; opacity: 0.9; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 20px;'>
-                    👤 {nome_usuario}
-                </span>
+        <div class="custom-navbar">
+            <div class="nav-left">
+                <span class="nav-brand">✈️ CGNA | GOL</span>
+                <span class="nav-user">👤 {nome_usuario}</span>
             </div>
-
-            <div style='text-align: right;'>
-                <div id="utc-clock" style='font-size: 1.3rem; font-weight: bold; font-variant-numeric: tabular-nums;'>
-                    00:00:00 UTC
-                </div>
-                <div style='font-size: 0.7rem; opacity: 0.8; text-transform: uppercase;'>
-                    Tempo Universal Coordenado
-                </div>
+            <div class="nav-right">
+                <div id="utc-clock" class="clock">00:00:00 UTC</div>
+                <div class="clock-label">Tempo Universal Coordenado</div>
             </div>
         </div>
 
@@ -51,17 +27,43 @@ def barra_superior():
                 const h = String(now.getUTCHours()).padStart(2, '0');
                 const m = String(now.getUTCMinutes()).padStart(2, '0');
                 const s = String(now.getUTCSeconds()).padStart(2, '0');
-                document.getElementById('utc-clock').innerText = h + ":" + m + ":" + s + " UTC";
+                const clockEl = document.getElementById('utc-clock');
+                if (clockEl) clockEl.innerText = h + ":" + m + ":" + s + " UTC";
             }}
-            setInterval(updateClock, 1000);
+            // Limpa intervalos anteriores para evitar fantasmas
+            if (window.utcInterval) clearInterval(window.utcInterval);
+            window.utcInterval = setInterval(updateClock, 1000);
             updateClock();
         </script>
 
         <style>
-            .main .block-container {{
-                padding-top: 85px !important;
+            /* Barra Superior */
+            .custom-navbar {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 60px;
+                background-color: #0d6efd;
+                z-index: 999999;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0 20px;
+                color: white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                font-family: 'Source Sans Pro', sans-serif;
             }}
-            header {{visibility: hidden;}}
-            [data-testid="stSidebarNav"] {{padding-top: 20px;}}
+            .nav-left {{ display: flex; align-items: center; }}
+            .nav-brand {{ font-weight: 800; font-size: 1.1rem; }}
+            .nav-user {{ margin-left: 20px; font-weight: 300; font-size: 0.85rem; border-left: 1px solid rgba(255,255,255,0.3); padding-left: 20px; }}
+            .nav-right {{ text-align: right; line-height: 1; }}
+            .clock {{ font-size: 1.2rem; font-weight: 700; }}
+            .clock-label {{ font-size: 0.6rem; opacity: 0.8; letter-spacing: 1px; margin-top: 2px; }}
+
+            /* Ajustes do Streamlit */
+            .stApp {{ margin-top: 40px; }}
+            header {{ visibility: hidden; }}
+            [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
         </style>
     """, unsafe_allow_html=True)
