@@ -4,6 +4,7 @@ import hashlib
 from sqlalchemy import text
 import extra_streamlit_components as stx
 from utils import login_manager
+from utils import ui
 
 # Configuração da Página
 st.set_page_config(
@@ -12,6 +13,7 @@ st.set_page_config(
     layout="centered", 
     initial_sidebar_state="collapsed"
 )
+ui.setup_sidebar() # <--- Chama o logo aqui
 
 # ==============================================================================
 # INICIALIZAÇÃO DO COOKIE MANAGER (UMA VEZ SÓ)
