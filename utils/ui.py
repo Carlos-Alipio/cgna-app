@@ -1,9 +1,5 @@
 import streamlit as st
 
 def setup_sidebar():
-    # Opção 1 (Fixa)
+    # Caminho do arquivo conforme sua estrutura de pastas
     st.logo("assets/logo-voegol-new.svg")
-    
-    # OU Opção 2 (Grande)
-    #with st.sidebar:
-        #st.image("assets/logo-voegol-new.svg", width=250)
