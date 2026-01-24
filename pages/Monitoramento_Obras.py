@@ -81,47 +81,51 @@ def toggle_dia_callback(a, m, d):
     else: st.session_state.dias_selecionados.add(k)
 
 # ==============================================================================
-# 1. CARREGAMENTO E TRATAMENTO DE DADOS (VERSÃO À PROVA DE ERROS)
+# 1. CARREGAMENTO E TRATAMENTO DE DADOS (CORREÇÃO TOTAL)
 # ==============================================================================
-# 1.1 Carrega os dados brutos
+# 1.1 Carrega dados brutos
 df_raw = db_manager.carregar_notams()
 
 if df_raw.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# 1.2 Cria uma cópia independente e limpa o índice
+# 1.2 Limpeza inicial: Cópia profunda e reset de índice
 df_notams = df_raw.copy().reset_index(drop=True)
 
-# 1.3 Mapeamento de Colunas (Supabase -> Código)
-mapeamento = {
-    'icaoairport_id': 'loc', 
-    'id': 'n'
-}
+# 1.3 Mapeamento (Supabase -> Código)
+mapeamento = {'icaoairport_id': 'loc', 'id': 'n'}
 df_notams = df_notams.rename(columns=mapeamento)
 
-# 1.4 Tratamento preventivo de valores nulos (Evita erros de concatenação)
-df_notams['loc'] = df_notams['loc'].fillna("N/I").astype(str)
-df_notams['n'] = df_notams['n'].fillna("0").astype(str)
+# 1.4 Tratamento de Nulos (Essencial para evitar erros de texto)
+for col in ['loc', 'n', 'assunto_desc']:
+    if col not in df_notams.columns:
+        df_notams[col] = "N/I"
+    else:
+        df_notams[col] = df_notams[col].fillna("N/I").astype(str)
 
-# 1.5 CRIAÇÃO DO ID ÚNICO (Método .apply - Resolve o ValueError da linha 116)
-# O 'axis=1' garante que a conta seja feita por linha, mantendo o tamanho sempre igual
-df_notams['id_notam'] = df_notams.apply(
-    lambda row: f"{row['loc']}_{row['n']}", axis=1
-)
+# 1.5 Criação do ID Único (Via apply para segurança total)
+df_notams['id_notam'] = df_notams.apply(lambda x: f"{x['loc']}_{x['n']}", axis=1)
 
-# 1.6 FILTRAGEM (Criação do df_critico)
-# Use os filtros que você já possui (assunto_desc, condicao_desc, etc.)
-df_critico = df_notams.copy()
+# 1.6 Filtragem (df_critico)
+# Adicione seus filtros de frota/assunto aqui se houver
+# Exemplo: df_critico = df_notams[df_notams['loc'].isin(frota)].copy()
+df_critico = df_notams.copy() 
 
-# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO
+# 1.7 PREPARAÇÃO DA TABELA DE SELEÇÃO (AQUI ESTAVA O ERRO DA LINHA 125)
 cols_selecao = ['id_notam', 'loc', 'n', 'assunto_desc']
-# Garante que as colunas existam antes de selecionar
+
+# Garante que as colunas existem
 for col in cols_selecao:
     if col not in df_critico.columns:
         df_critico[col] = "N/I"
 
 df_sel = df_critico[cols_selecao].copy()
+
+# --- CORREÇÃO FINAL: Reseta o índice do df_sel antes de criar colunas ---
+df_sel = df_sel.reset_index(drop=True) 
+
+# Agora a criação do Rótulo funciona porque o índice está limpo (0, 1, 2...)
 df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
 
 # ==============================================================================
