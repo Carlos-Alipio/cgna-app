@@ -38,7 +38,6 @@ if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id
 # Trava visual: Controla se o Calendário e a Análise aparecem
 if 'show_editor' not in st.session_state: st.session_state.show_editor = False
 
-# Garante que as variáveis de tempo existam (iniciando com o ano atual)
 if 'ui_ano' not in st.session_state: st.session_state.ui_ano = datetime.now().year
 if 'ui_mes_idx' not in st.session_state: st.session_state.ui_mes_idx = datetime.now().month - 1
 if 'ui_hora_ini' not in st.session_state: st.session_state.ui_hora_ini = time(8, 0)
@@ -54,7 +53,6 @@ if df_notams.empty:
     st.warning("Banco de dados vazio.")
     st.stop()
 
-# Ajuste seguro para evitar erros de criação de coluna se elas não existirem
 if 'id_notam' not in df_notams.columns:
     df_notams['loc'] = df_notams['loc'].astype(str)
     df_notams['n'] = df_notams['n'].astype(str)
@@ -79,17 +77,9 @@ db_manager.limpar_registros_orfaos(ids_ativos)
 def limpar_editor_callback():
     st.session_state.dias_selecionados = set()
     st.session_state.editing_block_id = None
-    
-    # --- CORREÇÃO AQUI: FORÇA O ANO E MÊS ATUAIS ---
-    # Sempre que limpar o editor (novo bloco ou após salvar), volta para hoje (2026)
-    agora = datetime.now()
-    st.session_state.ui_ano = agora.year
-    st.session_state.ui_mes_idx = agora.month - 1
-    # -----------------------------------------------
-
     st.session_state.ui_hora_ini = time(8, 0)
     st.session_state.ui_hora_fim = time(17, 0)
-    st.session_state.show_editor = False 
+    st.session_state.show_editor = False # Fecha o calendário e a análise
 
 def novo_bloco_callback():
     limpar_editor_callback()
@@ -108,7 +98,6 @@ def carregar_bloco_callback(block_id):
         st.session_state.dias_selecionados.add(dt_start.strftime("%Y-%m-%d"))
         if first_slot is None: first_slot = s
 
-    # Ao editar, carregamos a data DO BLOCO (pode ser diferente da atual)
     if isinstance(first_slot['start'], str):
         dt_ref = datetime.fromisoformat(first_slot['start'])
         dt_end_ref = datetime.fromisoformat(first_slot['end'])
@@ -121,7 +110,7 @@ def carregar_bloco_callback(block_id):
     st.session_state.ui_hora_ini = dt_ref.time()
     st.session_state.ui_hora_fim = dt_end_ref.time()
     st.session_state.editing_block_id = block_id
-    st.session_state.show_editor = True 
+    st.session_state.show_editor = True # Abre o calendário para edição
 
 def toggle_dia_callback(a, m, d):
     k = f"{a}-{m:02d}-{d:02d}"
@@ -171,18 +160,16 @@ def excluir_bloco_callback():
         limpar_editor_callback()
 
 # ==============================================================================
-# 2. INTERFACE
+# 2. INTERFACE (LAYOUT 1 - 3 - 1)
 # ==============================================================================
 
 tab_cadastro, tab_cronograma = st.tabs(["🛠️ Cadastro & Edição", "📅 Visão Geral"])
 
 with tab_cadastro:
     
-    # --- 1. NOTAMs (Largura Total) ---
+    # --- 1 COLUNA: 1. NOTAMs (Largura Total) ---
     st.subheader("1. NOTAMs")
-    
-    # Pequena proteção para evitar erros de índice se houver filtragem
-    df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy().reset_index(drop=True)
+    df_sel = df_critico[['id_notam', 'loc', 'n', 'assunto_desc']].copy()
     df_sel['Rotulo'] = df_sel['loc'] + " " + df_sel['n']
     
     event = st.dataframe(
@@ -205,10 +192,10 @@ with tab_cadastro:
 
     st.divider()
 
-    # --- 3 COLUNAS ---
+    # --- 3 COLUNAS: Blocos / Dados de Referência / Calendário ---
     col_blocos, col_dados, col_editor = st.columns([1.2, 1.2, 2.5])
 
-    # --- 2. Blocos ---
+    # --- COLUNA 1: 2. Blocos ---
     with col_blocos:
         st.subheader("2. Blocos")
         if notam_selecionado is None:
@@ -221,4 +208,86 @@ with tab_cadastro:
                 df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
                 df_slots['end_dt'] = pd.to_datetime(df_slots['end'])
                 
-                df_blocos = df_slots.groupby('block_id').agg
+                df_blocos = df_slots.groupby('block_id').agg(
+                    inicio_min=('start_dt', 'min'),
+                    inicio_max=('start_dt', 'max'),
+                    h_ini=('start_dt', lambda x: x.iloc[0].strftime('%H:%M')),
+                    h_fim=('end_dt', lambda x: x.iloc[0].strftime('%H:%M')),
+                ).reset_index().sort_values('inicio_min')
+
+                st.caption("Clique para Editar:")
+                for _, row in df_blocos.iterrows():
+                    b_id = row['block_id']
+                    lbl = f"{notam_selecionado['loc']}-{notam_selecionado['n']} | {row['inicio_min'].strftime('%d/%m')} | ⏰ {row['h_ini']}-{row['h_fim']}"
+                    tipo_btn = "primary" if st.session_state.editing_block_id == b_id else "secondary"
+                    st.button(lbl, key=f"btn_{b_id}", type=tipo_btn, use_container_width=True, on_click=carregar_bloco_callback, args=(b_id,))
+
+    # --- COLUNA 2: Dados de Referência ---
+    with col_dados:
+        st.subheader("📖 Dados de Referência")
+        if notam_selecionado is not None:
+            with st.container(border=True):
+                st.caption("B) Início / C) Fim")
+                st.markdown(f"**{notam_selecionado['b']}** até **{notam_selecionado['c']}**")
+                st.divider()
+                st.caption("D) Schedule / E) Texto")
+                d_text = str(notam_selecionado['d']) if not pd.isna(notam_selecionado['d']) else "H24"
+                st.info(f"🕒 {d_text}\n\n📝 {notam_selecionado['e']}")
+
+    # --- COLUNA 3: Calendário ---
+    with col_editor:
+        # Só exibe se houver um NOTAM e se clicou em 'Novo' ou 'Editar'
+        if notam_selecionado is not None and st.session_state.show_editor:
+            modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
+            st.subheader(f"3. Calendário ({modo})")
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.number_input("Ano", 2025, 2030, key="ui_ano")
+                mes_nomes = list(calendar.month_name)[1:]
+                sel_mes = c2.selectbox("Mês", mes_nomes, index=st.session_state.ui_mes_idx, key="widget_mes")
+                st.session_state.ui_mes_idx = mes_nomes.index(sel_mes)
+                c3.time_input("Início UTC", key="ui_hora_ini")
+                c4.time_input("Fim UTC", key="ui_hora_fim")
+
+                st.divider()
+                # Renderização do Calendário...
+                ano_atual = st.session_state.ui_ano
+                mes_idx = st.session_state.ui_mes_idx + 1
+                cal_matrix = calendar.monthcalendar(ano_atual, mes_idx)
+                cols_h = st.columns(7)
+                for i, d in enumerate(["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"]): 
+                    cols_h[i].markdown(f"<div style='text-align:center; color:#888; font-size:0.8rem'>{d}</div>", unsafe_allow_html=True)
+                for semana in cal_matrix:
+                    cols = st.columns(7)
+                    for i, dia in enumerate(semana):
+                        if dia != 0:
+                            chave = f"{ano_atual}-{mes_idx:02d}-{dia:02d}"
+                            b_type = "primary" if chave in st.session_state.dias_selecionados else "secondary"
+                            cols[i].button(f"{dia}", key=f"cal_{chave}", type=b_type, use_container_width=True, on_click=toggle_dia_callback, args=(ano_atual, mes_idx, dia))
+
+            col_save, col_del = st.columns([3, 1])
+            with col_save:
+                lbl = "💾 Atualizar" if st.session_state.editing_block_id else "✅ Criar"
+                st.button(lbl, type="primary", use_container_width=True, on_click=salvar_bloco_callback)
+            with col_del:
+                if st.session_state.editing_block_id:
+                    st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
+        elif notam_selecionado is not None:
+            st.info("💡 Clique em '✨ Novo Bloco' ou em um bloco existente para abrir o calendário.")
+
+    # --- 1 COLUNA: 4. Análise Detalhada (Largura Total) ---
+    # Só exibe se houver um NOTAM e se o editor estiver ABERTO
+    if notam_selecionado is not None and st.session_state.show_editor:
+        st.divider()
+        st.subheader("4. Análise Detalhada dos Slots")
+        if st.session_state.cache_slots:
+            df_analise = pd.DataFrame(st.session_state.cache_slots)
+            df_analise['start_dt'] = pd.to_datetime(df_analise['start'])
+            df_analise['end_dt'] = pd.to_datetime(df_analise['end'])
+            df_analise['Data Início'] = df_analise['start_dt'].dt.strftime('%d/%m/%Y')
+            df_analise['Hora Início'] = df_analise['start_dt'].dt.strftime('%H:%M')
+            df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
+            df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
+            dias_map = {'Monday': 'SEG', 'Tuesday': 'TER', 'Wednesday': 'QUA', 'Thursday': 'QUI', 'Friday': 'SEX', 'Saturday': 'SÁB', 'Sunday': 'DOM'}
+            df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').map(dias_map)
+            st.dataframe(df_analise[['Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Dia Semana']], use_container_width=True, hide_index=True, height=300)
