@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.logo("assets/logo.png")
+st.logo("assets/logo-voegol-new.svg")
 
 # ==============================================================================
 # INICIALIZAÇÃO DO COOKIE MANAGER (UMA VEZ SÓ)
