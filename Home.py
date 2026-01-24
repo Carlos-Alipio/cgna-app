@@ -56,12 +56,13 @@ else:
     ui.setup_sidebar()
 
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
+    pg_notam = st.Page("pages/Notam.py", title="Notam", icon=":material/connecting_airports:")
     pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
     pg_config = st.Page("pages/Configuracoes.py", title="Ajustes", icon=":material/settings:")
 
     pg = st.navigation({
         "Navegação": [pg_home],
-        "Operacional": [pg_obras, pg_config]
+        "Operacional": [pg_notam, pg_obras, pg_config]
     })
 
     # Este botão agora será movido para o rodapé automaticamente pelo CSS em ui.py
