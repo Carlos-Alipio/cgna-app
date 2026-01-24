@@ -9,7 +9,7 @@ st.set_page_config(
     page_title="CGNA - GOL", 
     page_icon="assets/logo-voegol-new.svg", 
     layout="wide",
-    initial_sidebar_state="expanded" # <--- MUDANÇA AQUI: Inicia Aberto
+    initial_sidebar_state="expanded" # Garante que o menu inicie aberto
 )
 
 cookie_manager = stx.CookieManager(key="main_auth_interface")
