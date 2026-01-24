@@ -77,7 +77,7 @@ else:
     
     # Definição das Páginas (Material Symbols!)
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
-    pg_obras = st.Page("pages/4-Monitoramento_Obras.py", title="Monitoramento Obras", icon=":material/construction:")
+    pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Monitoramento Obras", icon=":material/construction:")
     pg_notam = st.Page("pages/Configuracoes.py", title="Configurações", icon=":material/settings:")
 
     # Botão de Logout Manual na Sidebar
