@@ -34,6 +34,8 @@ if 'dias_selecionados' not in st.session_state: st.session_state.dias_selecionad
 if 'notam_ativo' not in st.session_state: st.session_state.notam_ativo = None
 if 'cache_slots' not in st.session_state: st.session_state.cache_slots = [] 
 if 'editing_block_id' not in st.session_state: st.session_state.editing_block_id = None 
+# Variável para controlar a visibilidade do calendário
+if 'show_editor' not in st.session_state: st.session_state.show_editor = False
 
 if 'ui_ano' not in st.session_state: st.session_state.ui_ano = datetime.now().year
 if 'ui_mes_idx' not in st.session_state: st.session_state.ui_mes_idx = datetime.now().month - 1
@@ -76,6 +78,11 @@ def limpar_editor_callback():
     st.session_state.editing_block_id = None
     st.session_state.ui_hora_ini = time(8, 0)
     st.session_state.ui_hora_fim = time(17, 0)
+    st.session_state.show_editor = False
+
+def novo_bloco_click():
+    limpar_editor_callback()
+    st.session_state.show_editor = True
 
 def carregar_bloco_callback(block_id):
     slots_do_bloco = [s for s in st.session_state.cache_slots if s['block_id'] == block_id]
@@ -102,6 +109,7 @@ def carregar_bloco_callback(block_id):
     st.session_state.ui_hora_ini = dt_ref.time()
     st.session_state.ui_hora_fim = dt_end_ref.time()
     st.session_state.editing_block_id = block_id
+    st.session_state.show_editor = True
 
 def toggle_dia_callback(a, m, d):
     k = f"{a}-{m:02d}-{d:02d}"
@@ -191,7 +199,7 @@ with tab_cadastro:
         if notam_selecionado is None:
             st.info("👈 Selecione um NOTAM.")
         else:
-            st.button("✨ Novo Bloco", use_container_width=True, type="secondary", on_click=limpar_editor_callback)
+            st.button("✨ Novo Bloco", use_container_width=True, type="secondary", on_click=novo_bloco_click)
             if st.session_state.cache_slots:
                 df_slots = pd.DataFrame(st.session_state.cache_slots)
                 df_slots['start_dt'] = pd.to_datetime(df_slots['start'])
@@ -235,11 +243,11 @@ with tab_cadastro:
                 st.caption("E) Texto do Notam:")
                 st.info(f"{notam_selecionado['e']}")
 
-    # --- COLUNA: CALENDÁRIO ---
+    # --- COLUNA: CALENDÁRIO (Visível apenas em edição ou Novo Bloco) ---
     with col_calendario:
-        modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
-        st.subheader(f"3. Calendário ({modo})")
-        if notam_selecionado is not None:
+        if st.session_state.show_editor and notam_selecionado is not None:
+            modo = "✏️ EDITANDO" if st.session_state.editing_block_id else "➕ NOVO BLOCO"
+            st.subheader(f"3. Calendário ({modo})")
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns(4)
                 c1.number_input("Ano", 2025, 2030, key="ui_ano")
@@ -275,24 +283,28 @@ with tab_cadastro:
             with col_del:
                 if st.session_state.editing_block_id:
                     st.button("🗑️ Excluir", type="secondary", use_container_width=True, on_click=excluir_bloco_callback)
+        else:
+            # Espaço reservado para manter o layout de 3 colunas
+            st.empty()
 
-    # --- 3. ANÁLISE DETALHADA (Largura Total) ---
-    st.divider()
-    st.subheader("4. Análise Detalhada dos Slots")
-    if st.session_state.cache_slots:
-        df_analise = pd.DataFrame(st.session_state.cache_slots)
-        df_analise['start_dt'] = pd.to_datetime(df_analise['start'])
-        df_analise['end_dt'] = pd.to_datetime(df_analise['end'])
-        df_analise['Data Início'] = df_analise['start_dt'].dt.strftime('%d/%m/%Y')
-        df_analise['Hora Início'] = df_analise['start_dt'].dt.strftime('%H:%M')
-        df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
-        df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
-        dias_map = {'Monday': 'SEG', 'Tuesday': 'TER', 'Wednesday': 'QUA', 'Thursday': 'QUI', 'Friday': 'SEX', 'Saturday': 'SÁB', 'Sunday': 'DOM'}
-        df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').map(dias_map)
-        df_analise = df_analise.sort_values('start_dt')
-        st.dataframe(df_analise[['Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Dia Semana']], use_container_width=True, hide_index=True, height=300)
-    else:
-        st.info("Nenhum slot cadastrado.")
+    # --- 3. ANÁLISE DETALHADA (Acessível apenas se NOTAM selecionado) ---
+    if notam_selecionado is not None:
+        st.divider()
+        st.subheader("4. Análise Detalhada dos Slots")
+        if st.session_state.cache_slots:
+            df_analise = pd.DataFrame(st.session_state.cache_slots)
+            df_analise['start_dt'] = pd.to_datetime(df_analise['start'])
+            df_analise['end_dt'] = pd.to_datetime(df_analise['end'])
+            df_analise['Data Início'] = df_analise['start_dt'].dt.strftime('%d/%m/%Y')
+            df_analise['Hora Início'] = df_analise['start_dt'].dt.strftime('%H:%M')
+            df_analise['Data Fim'] = df_analise['end_dt'].dt.strftime('%d/%m/%Y')
+            df_analise['Hora Fim'] = df_analise['end_dt'].dt.strftime('%H:%M')
+            dias_map = {'Monday': 'SEG', 'Tuesday': 'TER', 'Wednesday': 'QUA', 'Thursday': 'QUI', 'Friday': 'SEX', 'Saturday': 'SÁB', 'Sunday': 'DOM'}
+            df_analise['Dia Semana'] = df_analise['start_dt'].dt.strftime('%A').map(dias_map)
+            df_analise = df_analise.sort_values('start_dt')
+            st.dataframe(df_analise[['Data Início', 'Hora Início', 'Data Fim', 'Hora Fim', 'Dia Semana']], use_container_width=True, hide_index=True, height=300)
+        else:
+            st.info("Nenhum slot cadastrado.")
 
 with tab_cronograma:
     if st.session_state.cache_slots:
