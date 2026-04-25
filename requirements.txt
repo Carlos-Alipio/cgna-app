@@ -46,3 +46,7 @@ xmltodict==1.0.2
 supabase
 psycopg2-binary
 xlsxwriter
+pandas
+xlrd
+openpyxl
+lxml
