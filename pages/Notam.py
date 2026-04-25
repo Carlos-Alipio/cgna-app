@@ -132,7 +132,7 @@ def exibir_detalhes_popup(dados):
             white-space: pre-wrap;
             line-height: 1.4;
             margin-bottom: 0.5rem;
-            min-height: 90px; /* Garante espaço para aprox. 4 linhas */
+            min-height: 150px; /* Garante espaço para aprox. 4 linhas */
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
