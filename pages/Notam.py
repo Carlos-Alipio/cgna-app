@@ -50,16 +50,30 @@ def exibir_detalhes_popup(dados):
     
     st.write("")
 
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.markdown(f"**Assunto:**")
+        st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
+    
+    with c4:
+        cond = dados.get('condicao_desc', 'N/A')
+        cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
+        st.markdown(f"**Condição:**")
+        st.markdown(f"##### :{cor}[{cond}]")
+
+
     # 5. Assunto
-    st.markdown(f"**Assunto:**")
-    st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
+    #st.markdown(f"**Assunto:**")
+    #st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
 
     # 6. Condição
-    cond = dados.get('condicao_desc', 'N/A')
-    cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
+    #cond = dados.get('condicao_desc', 'N/A')
+    #cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
     
-    st.markdown(f"**Condição:**")
-    st.markdown(f"##### :{cor}[{cond}]")
+    #st.markdown(f"**Condição:**")
+    #st.markdown(f"##### :{cor}[{cond}]")
+
 
     st.divider()
 
