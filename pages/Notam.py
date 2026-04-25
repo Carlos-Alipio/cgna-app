@@ -25,13 +25,21 @@ if 'novos_ids' not in st.session_state:
 
 
 
+
+
+
+
+
+import streamlit as st
+# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
+
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
-@st.dialog("Detalhes do NOTAM", width="large") # <-- Voltou para large para dar respiro
+@st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
 
-    # --- INÍCIO DA INJEÇÃO DE CSS (MEIO-TERMO) ---
+    # --- INÍCIO DA INJEÇÃO DE CSS ---
     st.markdown(
         """
         <style>
@@ -39,10 +47,11 @@ def exibir_detalhes_popup(dados):
         [data-testid="stMetricValue"] {
             font-size: 1.4rem !important; 
         }
-        /* Tamanho intermediário para o título, com uma leve aproximação do valor */
+        /* Título menor, colado no valor e em tom de CINZA */
         [data-testid="stMetricLabel"] {
             font-size: 0.9rem !important;
             margin-bottom: -4px !important; 
+            color: #808080 !important; /* Cor cinza aplicada aqui */
         }
         </style>
         """,
@@ -50,7 +59,6 @@ def exibir_detalhes_popup(dados):
     )
     # --- FIM DA INJEÇÃO DE CSS ---
 
-    # Função para um divisor customizado (meio-termo entre st.divider e o muito compactado)
     def linha_suave():
         st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);'>", unsafe_allow_html=True)
 
@@ -106,10 +114,11 @@ def exibir_detalhes_popup(dados):
     linha_suave()
 
     # TEXTO PRINCIPAL DO NOTAM
-    st.caption("Texto (e)")
+    # Para deixar este rótulo cinza igual aos outros, usamos HTML rápido
+    st.markdown("**<span style='color: #808080; font-size: 0.9rem;'>Texto (e)</span>**", unsafe_allow_html=True)
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
-    # HTML com respiro moderado
+    # HTML com min-height garantindo altura mínima
     st.markdown(
         f"""
         <div style='
@@ -123,10 +132,14 @@ def exibir_detalhes_popup(dados):
             white-space: pre-wrap;
             line-height: 1.4;
             margin-bottom: 0.5rem;
+            min-height: 90px; /* Garante espaço para aprox. 4 linhas */
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
+
+    # NOVA LINHA DIVISÓRIA AQUI
+    linha_suave()
 
     # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
