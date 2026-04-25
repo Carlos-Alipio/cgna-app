@@ -291,8 +291,8 @@ if not df_total.empty:
         "loc": st.column_config.TextColumn("Localidade", width="small"),
         "n": st.column_config.TextColumn("Número", width="small"),
         "assunto_desc": st.column_config.TextColumn("Assunto", width="large"),
-        "condicao_desc": st.column_config.TextColumn("Condição", width="medium"),
-        "dt": st.column_config.TextColumn("Data", width="medium")
+        "condicao_desc": st.column_config.TextColumn("Condição", width="large"),
+        "dt": st.column_config.TextColumn("Data", width="small")
     }
 
     # --- TABELA EM LARGURA TOTAL ---
