@@ -98,7 +98,7 @@ def limpar_planilha_notams(arquivo):
 # ==============================================================================
 # INTERFACE STREAMLIT PARA TESTE
 # ==============================================================================
-st.title("🗂️ Importador e Tratamento de NOTAMs")
+st.title("🗂️ FAA NOTAMs")
 
 arquivo_upload = st.file_uploader("Faça o upload do arquivo CSV/XLS da FAA", type=["csv", "xls", "xlsx"])
 
@@ -110,7 +110,7 @@ if arquivo_upload:
         st.success(f"Arquivo processado com sucesso! {len(df_tratado)} registros encontrados.")
         
         # Exibe os dados prontos para o banco
-        st.subheader("Visualização dos Dados Tratados")
+        st.subheader("Visualização dos Dados:")
         st.dataframe(df_tratado, use_container_width=True)
         
         # Próximos passos (Ainda não conectado)
