@@ -1,14 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
-from utils import ui
 
 # Importando módulos da pasta utils
-from utils import db_manager, api_decea, formatters
+from utils import ui, db_manager, api_decea, formatters
 
+# ==============================================================================
+# CONFIGURAÇÃO DA PÁGINA
+# ==============================================================================
 st.set_page_config(page_title="Monitoramento GOL", layout="wide")
 st.title("Monitoramento de NOTAMs")
-ui.setup_sidebar() # <--- Chama o logo aqui
+ui.setup_sidebar() # <--- Chama o logo/menu aqui
 
 # --- SEGURANÇA ---
 if 'logado' not in st.session_state or not st.session_state['logado']:
@@ -19,7 +21,6 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
-
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
@@ -28,6 +29,7 @@ def exibir_detalhes_popup(dados):
     st.write("\n")
     st.write("\n")
     st.write("\n")
+    
     # --- INÍCIO DA INJEÇÃO DE CSS ---
     st.markdown(
         """
@@ -103,7 +105,6 @@ def exibir_detalhes_popup(dados):
     linha_suave()
 
     # TEXTO PRINCIPAL DO NOTAM
-    # Para deixar este rótulo cinza igual aos outros, usamos HTML rápido
     st.markdown("**<span style='color: #808080; font-size: 0.9rem;'>Texto (e)</span>**", unsafe_allow_html=True)
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
@@ -121,13 +122,12 @@ def exibir_detalhes_popup(dados):
             white-space: pre-wrap;
             line-height: 1.4;
             margin-bottom: 0.5rem;
-            min-height: 150px; /* Garante espaço para aprox. 4 linhas */
+            min-height: 150px; 
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
 
-    # NOVA LINHA DIVISÓRIA AQUI
     st.write("\n")
     linha_suave()
 
@@ -135,9 +135,6 @@ def exibir_detalhes_popup(dados):
     with st.expander("🔍 Ver JSON Bruto"):
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
-
-
-
 
 st.divider()
 
@@ -183,6 +180,7 @@ with st.container(border=True):
         else:
             st.metric("NOTAMs Armazenados", 0, delta="Banco Vazio")
 
+    # LÓGICA DE ATUALIZAÇÃO VIA API
     if processar_atualizacao:
         if not meus_aeroportos:
             st.toast("⚠️ Configure seus Aeroportos antes de atualizar!", icon="🚫")
@@ -215,7 +213,7 @@ with st.container(border=True):
 st.write("") 
 
 # ==============================================================================
-# 3. EXIBIÇÃO DOS DADOS
+# 3. EXIBIÇÃO DOS DADOS E FILTROS AVANÇADOS
 # ==============================================================================
 
 if not df_total.empty:
@@ -226,9 +224,7 @@ if not df_total.empty:
     if 'dt' in df_filtrado.columns:
         df_filtrado = df_filtrado.sort_values(by='dt', ascending=False)
 
-    # ==============================================================================
-    # 🕵️‍♂️ FILTROS AVANÇADOS (Ocupam toda a largura agora)
-    # ==============================================================================
+    # --- FILTROS AVANÇADOS ---
     with st.expander("🔎 Filtros Avançados", expanded=True):
         f1, f2, f3 = st.columns(3)
         
@@ -269,7 +265,7 @@ if not df_total.empty:
     
     st.caption(f"Exibindo {len(df_view)} registros")
 
-    # --- ESTILO ---
+    # --- ESTILO E REALCE DOS NOVOS NOTAMs ---
     def realcar_novos(row):
         cor = ''
         if 'id' in row.index: 
@@ -288,15 +284,23 @@ if not df_total.empty:
         cols_para_tabela.append('id')
         
     styler = df_view[cols_para_tabela].style.apply(realcar_novos, axis=1)
-    column_config = {"id": None}
+    
+    # --- CONFIGURAÇÃO DE LARGURA E TÍTULOS DAS COLUNAS ---
+    column_config = {
+        "id": None,  # Mantém o ID oculto da visão do usuário
+        "loc": st.column_config.TextColumn("Localidade", width="small"),
+        "n": st.column_config.TextColumn("Número", width="small"),
+        "assunto_desc": st.column_config.TextColumn("Assunto", width="large"),
+        "condicao_desc": st.column_config.TextColumn("Condição", width="medium"),
+        "dt": st.column_config.TextColumn("Data", width="medium")
+    }
 
     # --- TABELA EM LARGURA TOTAL ---
-    # Removemos st.columns, então a tabela usa o layout="wide" da página
     evento = st.dataframe(
         styler,
         column_config=column_config,
         use_container_width=True, 
-        height=700, # Aumentei um pouco a altura já que temos mais espaço
+        height=700, 
         on_select="rerun", 
         selection_mode="single-row",
         hide_index=True
