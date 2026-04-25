@@ -27,7 +27,8 @@ if 'novos_ids' not in st.session_state:
 # ==============================================================================
 @st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
-
+    st.write("\n")
+    st.write("\n")
     # --- INÍCIO DA INJEÇÃO DE CSS ---
     st.markdown(
         """
@@ -130,7 +131,6 @@ def exibir_detalhes_popup(dados):
     # NOVA LINHA DIVISÓRIA AQUI
     st.write("\n")
     linha_suave()
-    st.write("\n")
 
     # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
