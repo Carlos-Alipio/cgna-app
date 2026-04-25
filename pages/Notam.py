@@ -19,20 +19,35 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
-import streamlit as st
-# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
 
 
 
-
-import streamlit as st
-# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
 
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
 @st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
+
+    # --- INÍCIO DA INJEÇÃO DE CSS ---
+    # Esse bloco altera o tamanho apenas dos metrics exibidos na tela
+    st.markdown(
+        """
+        <style>
+        /* Reduz o tamanho do conteúdo principal (o valor em destaque) */
+        [data-testid="stMetricValue"] {
+            font-size: 1.25rem !important; /* O padrão é por volta de 2rem. Diminua ou aumente aqui */
+        }
+        /* Opcional: Se quiser ajustar o tamanho do título do campo (Localidade, Tipo...) */
+        [data-testid="stMetricLabel"] {
+            font-size: 0.85rem !important;
+            margin-bottom: -5px; /* Deixa o título um pouquinho mais colado no valor */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    # --- FIM DA INJEÇÃO DE CSS ---
 
     # 1. ALERTA DE NOVO NOTAM
     if str(dados.get('id')) in st.session_state.get('novos_ids', []):
@@ -52,13 +67,12 @@ def exibir_detalhes_popup(dados):
 
     st.divider()
 
-    # 3. ASSUNTO E CONDIÇÃO (Linha 2 - Agora usando o mesmo layout)
+    # 3. ASSUNTO E CONDIÇÃO (Linha 2)
     c_assunto, c_cond = st.columns(2)
     
     c_assunto.metric("Assunto", dados.get('assunto_desc', 'N/A'))
         
     cond = dados.get('condicao_desc', 'N/A')
-    # Substituição da cor do texto por um indicador visual (emoji) para manter o padrão do st.metric
     if any(x in cond for x in ['Fechado', 'Proibido', 'Inoperante']):
         icone_cond = "🔴" 
     elif "Obras" in cond:
@@ -83,13 +97,12 @@ def exibir_detalhes_popup(dados):
     # 5. PERÍODO
     periodo = str(dados.get('d', '')).strip()
     if periodo and periodo not in ['nan', 'None']:
-        st.write("") # Leve espaçamento
+        st.write("") 
         st.metric("Período (d)", f"🕒 {periodo}")
 
     st.divider()
 
     # 6. TEXTO PRINCIPAL DO NOTAM
-    # Usando st.caption para manter o rótulo discreto como nos metrics
     st.caption("Texto (e)")
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
@@ -115,6 +128,9 @@ def exibir_detalhes_popup(dados):
     with st.expander("🔍 Ver JSON Bruto"):
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
+
+
+
 
 
 
