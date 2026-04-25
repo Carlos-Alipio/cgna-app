@@ -129,7 +129,7 @@ with st.container(border=True):
     c_action, c_status, c_metrics = st.columns([0.20, 0.55, 0.25], gap="medium", vertical_alignment="center")
 
     with c_action:
-        if st.button("🔄 Sincronizar", type="primary", use_container_width=True, help="Baixa todas as FIRs e aplica o filtro da sua frota."):
+        if st.button("🔄 Sincronizar", type="primary", use_container_width=True, help="Atualiza todos os NOTAMs."):
             processar_atualizacao = True
         else:
             processar_atualizacao = False
@@ -152,7 +152,7 @@ with st.container(border=True):
             st.metric(
                 label="NOTAMs monitorados:", 
                 value=len(df_total),
-                delta=f"Último notam Adicionado: {data_fmt}",
+                delta=f"Último NOTAM Adicionado: {data_fmt}",
                 delta_color="off"
             )
         else:
@@ -190,7 +190,7 @@ with st.container(border=True):
 st.write("") 
 
 # ==============================================================================
-# 3. EXIBIÇÃO DOS DADOS (AGORA EM LARGURA TOTAL)
+# 3. EXIBIÇÃO DOS DADOS
 # ==============================================================================
 
 if not df_total.empty:
