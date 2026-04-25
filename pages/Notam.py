@@ -19,76 +19,70 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
+import streamlit as st
+# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
+
 # ==============================================================================
-# FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal (Pop-up).
+# FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
 @st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
 
-    if str(dados.get('id')) in st.session_state['novos_ids']:
+    # 1. ALERTA DE NOVO NOTAM
+    # Usando .get() no session_state previne KeyError caso a chave não exista ainda
+    if str(dados.get('id')) in st.session_state.get('novos_ids', []):
         st.success("✨ **NOVO:** Notificação recente!")
 
+    # 2. IDENTIFICAÇÃO PRINCIPAL 
+    # Utilizando st.metric() para alinhar Localidade, Tipo, Número e Ref em uma única linha
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Localidade", dados.get('loc', '-'))
+    col2.metric("Tipo", dados.get('tp', '-'))
+    col3.metric("Número", dados.get('n', '-'))
+    
+    ref_val = str(dados.get('ref', '')).strip()
+    if ref_val and ref_val not in ['nan', 'None']:
+        col4.metric("Referência", ref_val)
+    else:
+        col4.metric("Referência", "-")
+
     st.divider()
 
-    # 1. Localidade
-    st.markdown(f"**Localidade:**")
-    st.markdown(f"## {dados.get('loc', '-')}")
-
-    # 2. Tipo e 3. Número
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Tipo:**")
-        st.info(f"{dados.get('tp', '-')}")
-    with c2:
-        st.markdown("**Número:**")
-        st.info(f"{dados.get('n', '-')}")
-
-    # 4. Referência
-    ref_val = dados.get('ref', '')
-    if ref_val and ref_val not in ['nan', 'None', '']:
-        st.markdown(f"**Referência:** {ref_val}")
-    
-    st.write("")
-
-    c3, c4 = st.columns(2)
-    with c3:
-        st.markdown(f"**Assunto:**")
-        st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
-    
-    with c4:
+    # 3. ASSUNTO E CONDIÇÃO
+    c_assunto, c_cond = st.columns(2)
+    with c_assunto:
+        st.markdown("**Assunto:**")
+        st.subheader(f":green[{dados.get('assunto_desc', 'N/A')}]")
+        
+    with c_cond:
         cond = dados.get('condicao_desc', 'N/A')
-        cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
-        st.markdown(f"**Condição:**")
-        st.markdown(f"##### :{cor}[{cond}]")
+        cor = "red" if any(x in cond for x in ['Fechado', 'Proibido', 'Inoperante']) else "orange" if "Obras" in cond else "green"
+        st.markdown("**Condição:**")
+        st.subheader(f":{cor}[{cond}]")
 
     st.divider()
 
-    # 7. Início e 8. Fim
+    # 4. LINHA DO TEMPO (INÍCIO, FIM E PERÍODO)
     data_b = formatters.formatar_data_notam(dados.get('b'))
     data_c = formatters.formatar_data_notam(dados.get('c'))
 
     c_ini, c_fim = st.columns(2)
-    with c_ini:
-        st.markdown("**Início (b):**")
-        st.write(f"📅 {data_b}")
-    with c_fim:
-        st.markdown("**Fim (c):**")
-        if "PERM" in str(data_c):
-            st.write(f"📅 :red[{data_c}]")
-        else:
-            st.write(f"📅 {data_c}")
+    c_ini.markdown(f"**Início (b):**\n\n📅 {data_b}")
+    
+    fim_str = f"📅 :red[{data_c}]" if "PERM" in str(data_c) else f"📅 {data_c}"
+    c_fim.markdown(f"**Fim (c):**\n\n{fim_str}")
 
-    # 9. Período
-    periodo = dados.get('d', '')
-    if periodo and periodo not in ['nan', 'None', '']:
-        st.markdown("**Período (d):**")
-        st.warning(f"🕒 {periodo}")
+    # Movemos o Período (d) para aproveitar os ícones nativos do Streamlit
+    periodo = str(dados.get('d', '')).strip()
+    if periodo and periodo not in ['nan', 'None']:
+        st.write("") # Leve espaçamento
+        st.warning(f"**Período (d):** {periodo}", icon="🕒")
 
     st.divider()
 
-    # 10. Texto
+    # 5. TEXTO PRINCIPAL DO NOTAM (HTML Customizado)
     st.markdown("**Texto (e):**")
-    texto_e = dados.get('e', 'Sem texto')
+    texto_e = str(dados.get('e', 'Sem texto')).strip()
     
     st.markdown(
         f"""
@@ -101,15 +95,17 @@ def exibir_detalhes_popup(dados):
             font-size: 14px;
             white-space: pre-wrap;
             line-height: 1.5;
-        '>{texto_e.strip()}</div>
+            margin-bottom: 1rem;
+        '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
 
-    st.divider()
-
+    # 6. DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
-        st.json(dados.to_dict())
+        # Garante compatibilidade caso 'dados' seja um Dicionário ou uma Series do Pandas
+        json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
+        st.json(json_data)
 
 
 st.divider()
