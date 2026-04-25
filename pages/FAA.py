@@ -33,8 +33,8 @@ def tratar_data_faa(data_str):
 # FUNÇÃO PRINCIPAL DE LIMPEZA
 # ==============================================================================
 def limpar_planilha_notams(arquivo):
-    # 1. Pular as 4 primeiras linhas de metadados
-    df = pd.read_csv(arquivo, skiprows=4)
+    # 1. Pular as 4 primeiras linhas de metadados e definir o enconding
+    df = pd.read_csv(arquivo, skiprows=4, encoding='latin1')
     
     # 2. Renomear as colunas para o padrão do Banco de Dados (snake_case)
     colunas_map = {
