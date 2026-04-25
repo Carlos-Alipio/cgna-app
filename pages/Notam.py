@@ -31,22 +31,22 @@ def exibir_detalhes_popup(dados):
     st.divider()
 
     # 1. Localidade
-    st.markdown(f"**Localidade (loc):**")
+    st.markdown(f"**Localidade:**")
     st.markdown(f"## {dados.get('loc', '-')}")
 
     # 2. Tipo e 3. Número
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**Tipo (tp):**")
+        st.markdown("**Tipo:**")
         st.info(f"{dados.get('tp', '-')}")
     with c2:
-        st.markdown("**Número (n):**")
+        st.markdown("**Número:**")
         st.info(f"{dados.get('n', '-')}")
 
     # 4. Referência
     ref_val = dados.get('ref', '')
     if ref_val and ref_val not in ['nan', 'None', '']:
-        st.markdown(f"**Referência (ref):** {ref_val}")
+        st.markdown(f"**Referência:** {ref_val}")
     
     st.write("")
 
