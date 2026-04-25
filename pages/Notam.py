@@ -23,34 +23,26 @@ if 'novos_ids' not in st.session_state:
 
 
 
+
+
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
-# 1. LARGURA: Removido o width="large" para usar o tamanho normal (mais estreito)
-@st.dialog("Detalhes do NOTAM") 
+@st.dialog("Detalhes do NOTAM", width="large") # <-- Voltou para large para dar respiro
 def exibir_detalhes_popup(dados):
 
-    # --- INÍCIO DA INJEÇÃO DE CSS ---
-    # Foco extremo em compactação vertical (Alturas, Margens e Paddings)
+    # --- INÍCIO DA INJEÇÃO DE CSS (MEIO-TERMO) ---
     st.markdown(
         """
         <style>
-        /* Reduz o tamanho da fonte do valor do metric */
+        /* Tamanho intermediário para o valor em destaque */
         [data-testid="stMetricValue"] {
-            font-size: 1.1rem !important; 
+            font-size: 1.4rem !important; 
         }
-        /* Reduz o tamanho do título do metric e aproxima MUITO do valor */
+        /* Tamanho intermediário para o título, com uma leve aproximação do valor */
         [data-testid="stMetricLabel"] {
-            font-size: 0.8rem !important;
-            margin-bottom: -10px !important; 
-        }
-        /* Reduz o espaçamento geral das colunas e dos blocos no Streamlit */
-        [data-testid="stVerticalBlock"] {
-            gap: 0.3rem !important;
-        }
-        /* Compacta a altura da caixa de st.success / st.warning */
-        [data-testid="stAlert"] {
-            padding: 0.3rem 0.8rem !important;
+            font-size: 0.9rem !important;
+            margin-bottom: -4px !important; 
         }
         </style>
         """,
@@ -58,17 +50,15 @@ def exibir_detalhes_popup(dados):
     )
     # --- FIM DA INJEÇÃO DE CSS ---
 
-    # 2. ALTURA: Substituímos o st.divider() (que consome muito espaço) 
-    # por uma linha HTML customizada com margens mínimas.
-    def linha_compacta():
-        st.markdown("<hr style='margin: 0.4rem 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);'>", unsafe_allow_html=True)
+    # Função para um divisor customizado (meio-termo entre st.divider e o muito compactado)
+    def linha_suave():
+        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);'>", unsafe_allow_html=True)
 
     # ALERTA DE NOVO NOTAM
     if str(dados.get('id')) in st.session_state.get('novos_ids', []):
         st.success("✨ **NOVO:** Notificação recente!")
-        linha_compacta()
+        linha_suave()
 
-    # 3. LARGURA: Adicionado gap="small" em todas as colunas
     # IDENTIFICAÇÃO PRINCIPAL (Linha 1)
     col1, col2, col3, col4 = st.columns(4, gap="small")
     col1.metric("Localidade", dados.get('loc', '-'))
@@ -78,7 +68,7 @@ def exibir_detalhes_popup(dados):
     ref_val = str(dados.get('ref', '')).strip()
     col4.metric("Referência", ref_val if ref_val and ref_val not in ['nan', 'None'] else "-")
 
-    linha_compacta()
+    linha_suave()
 
     # ASSUNTO E CONDIÇÃO (Linha 2)
     c_assunto, c_cond = st.columns(2, gap="small")
@@ -95,7 +85,7 @@ def exibir_detalhes_popup(dados):
         
     c_cond.metric("Condição", f"{icone_cond} {cond}")
 
-    linha_compacta()
+    linha_suave()
 
     # LINHA DO TEMPO: INÍCIO E FIM (Linha 3)
     data_b = formatters.formatar_data_notam(dados.get('b'))
@@ -110,29 +100,29 @@ def exibir_detalhes_popup(dados):
     # PERÍODO
     periodo = str(dados.get('d', '')).strip()
     if periodo and periodo not in ['nan', 'None']:
-        linha_compacta()
+        linha_suave()
         st.metric("Período (d)", f"🕒 {periodo}")
 
-    linha_compacta()
+    linha_suave()
 
     # TEXTO PRINCIPAL DO NOTAM
     st.caption("Texto (e)")
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
-    # 4. ALTURA: Reduzido o padding e line-height da caixa de HTML
+    # HTML com respiro moderado
     st.markdown(
         f"""
         <div style='
             background-color: rgba(128, 128, 128, 0.15);
-            padding: 8px 12px;
-            border-radius: 6px;
-            border-left: 4px solid #FF4B4B;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 5px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 14px; 
+            font-size: 15px; 
             font-weight: 500;
             white-space: pre-wrap;
-            line-height: 1.3;
-            margin-bottom: 0.2rem;
+            line-height: 1.4;
+            margin-bottom: 0.5rem;
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
