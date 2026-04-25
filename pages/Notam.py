@@ -129,7 +129,7 @@ def exibir_detalhes_popup(dados):
 
     # NOVA LINHA DIVISÓRIA AQUI
     linha_suave()
-    st.write
+    st.markdown
 
     # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
