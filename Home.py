@@ -6,7 +6,7 @@ from utils import login_manager, ui
 
 # Configuração inicial
 st.set_page_config(
-    page_title="CGNA - GOL", 
+    page_title="NOTAM - GOL", 
     page_icon="assets/logo-voegol-new.svg", 
     layout="wide",
     initial_sidebar_state="expanded" # Garante que o menu inicie aberto
@@ -39,7 +39,7 @@ if not st.session_state['logado']:
 # Interface Principal
 if not st.session_state['logado']:
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
-    st.title("🔒 Login CGNA")
+    st.title("🔒 Login NOTAM")
     e_log = st.text_input("E-mail")
     s_log = st.text_input("Senha", type="password")
     if st.button("Entrar", use_container_width=True):
