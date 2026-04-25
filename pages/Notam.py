@@ -20,8 +20,6 @@ if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
 
-st.write("\n")
-
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
