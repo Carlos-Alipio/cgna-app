@@ -33,19 +33,28 @@ def tratar_data_faa(data_str):
 # FUNÇÃO PRINCIPAL DE LIMPEZA
 # ==============================================================================
 def limpar_planilha_notams(arquivo):
-    # 0. Volta o ponteiro de leitura para o início (essencial no Streamlit)
+    # 0. Volta o ponteiro de leitura para o início
     arquivo.seek(0)
+    nome_arquivo = arquivo.name.lower()
     
-    # 1. Pular as 4 primeiras linhas e usar configurações robustas
-    df = pd.read_csv(
-        arquivo, 
-        skiprows=4, 
-        encoding='latin1', 
-        engine='python',         
-        on_bad_lines='skip'      
-    )
-    
-    # 2. LIMPEZA DOS TÍTULOS: Remove espaços invisíveis do começo e do fim dos nomes das colunas
+    # 1. LEITURA INTELIGENTE (Detecta o formato real do arquivo)
+    try:
+        if nome_arquivo.endswith('.csv'):
+            df = pd.read_csv(arquivo, skiprows=4, encoding='latin1', engine='python', on_bad_lines='skip')
+        elif nome_arquivo.endswith(('.xls', '.xlsx')):
+            try:
+                # Tenta ler como um arquivo Excel real
+                df = pd.read_excel(arquivo, skiprows=4)
+            except Exception:
+                # Retorno de segurança: Alguns sistemas do governo exportam HTML salvo com a extensão .xls
+                arquivo.seek(0)
+                tabelas = pd.read_html(arquivo, skiprows=4)
+                df = tabelas[0] # Pega a primeira tabela encontrada
+    except Exception as e:
+        st.error(f"Erro ao tentar ler o arquivo: {e}")
+        st.stop()
+        
+    # 2. LIMPEZA DOS TÍTULOS: Remove espaços invisíveis
     df.columns = df.columns.str.strip()
     
     # 3. Renomear as colunas
@@ -61,12 +70,11 @@ def limpar_planilha_notams(arquivo):
     df = df.rename(columns=colunas_map)
     
     # --- SISTEMA DE ALERTA ---
-    # Se a renomeação falhar, o app não quebra. Ele avisa você na tela!
     if 'loc' not in df.columns or 'n' not in df.columns:
         st.error("⚠️ As colunas esperadas não foram encontradas no arquivo.")
-        st.warning("Veja abaixo as colunas que o Pandas conseguiu ler. Pode ser que o arquivo tenha mudado de formato (ou o skiprows=4 precise ser ajustado):")
+        st.warning("Colunas lidas pelo sistema:")
         st.write(df.columns.tolist())
-        st.stop() # Interrompe o código aqui para você poder ver a tela
+        st.stop()
     # -------------------------
 
     # 4. Remover linhas vazias
