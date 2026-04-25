@@ -63,7 +63,7 @@ else:
 
     pg = st.navigation({
         "Navegação": [pg_home],
-        "Operacional": [pg_notam, pg_obras],
+        "Operacional": [pg_notam, pg_obras, pg_faa],
         "Ajustes": [pg_config]
     })
 
