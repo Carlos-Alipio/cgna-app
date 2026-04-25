@@ -127,7 +127,7 @@ def exibir_detalhes_popup(dados):
             border-radius: 8px;
             border-left: 5px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 15px; 
+            font-size: 18px; 
             font-weight: 500;
             white-space: pre-wrap;
             line-height: 1.4;
