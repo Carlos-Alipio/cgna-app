@@ -22,17 +22,6 @@ if 'novos_ids' not in st.session_state:
 
 
 
-
-
-
-
-
-
-
-
-import streamlit as st
-# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
-
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
@@ -140,21 +129,12 @@ def exibir_detalhes_popup(dados):
 
     # NOVA LINHA DIVISÓRIA AQUI
     linha_suave()
+    st.write
 
     # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
-
-
-
-
-
-
-
-
-
-
 
 
 
