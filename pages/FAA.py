@@ -42,6 +42,18 @@ def limpar_planilha_notams(arquivo):
         on_bad_lines='skip'      # Se alguma linha vier totalmente quebrada, ele ignora a linha e salva o resto, sem travar o app
     )
     
+    # 2. Renomear as colunas para o padrão do Banco de Dados (snake_case)
+    colunas_map = {
+        'Location': 'loc',
+        'NOTAM #/LTA #': 'n', 
+        'Class': 'classe',
+        'Issue Date (UTC)': 'dt_emissao',
+        'Effective Date (UTC)': 'dt_inicio',   
+        'Expiration Date (UTC)': 'dt_fim',     
+        'NOTAM Condition/LTA subject/Construction graphic title': 'texto_bruto' 
+    }
+    df = df.rename(columns=colunas_map)
+    
     # 3. Remover linhas vazias caso o CSV tenha sujeira no final
     df = df.dropna(subset=['loc', 'n'])
     
