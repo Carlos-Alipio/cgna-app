@@ -128,6 +128,7 @@ def exibir_detalhes_popup(dados):
     )
 
     # NOVA LINHA DIVISÓRIA AQUI
+    st.write("\n")
     linha_suave()
     st.write("\n")
 
