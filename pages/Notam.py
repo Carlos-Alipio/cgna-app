@@ -22,6 +22,12 @@ if 'novos_ids' not in st.session_state:
 import streamlit as st
 # Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
 
+
+
+
+import streamlit as st
+# Certifique-se de que o módulo 'formatters' está importado no seu arquivo principal
+
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
@@ -29,12 +35,10 @@ import streamlit as st
 def exibir_detalhes_popup(dados):
 
     # 1. ALERTA DE NOVO NOTAM
-    # Usando .get() no session_state previne KeyError caso a chave não exista ainda
     if str(dados.get('id')) in st.session_state.get('novos_ids', []):
         st.success("✨ **NOVO:** Notificação recente!")
 
-    # 2. IDENTIFICAÇÃO PRINCIPAL 
-    # Utilizando st.metric() para alinhar Localidade, Tipo, Número e Ref em uma única linha
+    # 2. IDENTIFICAÇÃO PRINCIPAL (Linha 1)
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Localidade", dados.get('loc', '-'))
     col2.metric("Tipo", dados.get('tp', '-'))
@@ -48,40 +52,45 @@ def exibir_detalhes_popup(dados):
 
     st.divider()
 
-    # 3. ASSUNTO E CONDIÇÃO
+    # 3. ASSUNTO E CONDIÇÃO (Linha 2 - Agora usando o mesmo layout)
     c_assunto, c_cond = st.columns(2)
-    with c_assunto:
-        st.markdown("**Assunto:**")
-        st.subheader(f":green[{dados.get('assunto_desc', 'N/A')}]")
+    
+    c_assunto.metric("Assunto", dados.get('assunto_desc', 'N/A'))
         
-    with c_cond:
-        cond = dados.get('condicao_desc', 'N/A')
-        cor = "red" if any(x in cond for x in ['Fechado', 'Proibido', 'Inoperante']) else "orange" if "Obras" in cond else "green"
-        st.markdown("**Condição:**")
-        st.subheader(f":{cor}[{cond}]")
+    cond = dados.get('condicao_desc', 'N/A')
+    # Substituição da cor do texto por um indicador visual (emoji) para manter o padrão do st.metric
+    if any(x in cond for x in ['Fechado', 'Proibido', 'Inoperante']):
+        icone_cond = "🔴" 
+    elif "Obras" in cond:
+        icone_cond = "🟠"
+    else:
+        icone_cond = "🟢"
+        
+    c_cond.metric("Condição", f"{icone_cond} {cond}")
 
     st.divider()
 
-    # 4. LINHA DO TEMPO (INÍCIO, FIM E PERÍODO)
+    # 4. LINHA DO TEMPO: INÍCIO E FIM (Linha 3)
     data_b = formatters.formatar_data_notam(dados.get('b'))
     data_c = formatters.formatar_data_notam(dados.get('c'))
 
     c_ini, c_fim = st.columns(2)
-    c_ini.markdown(f"**Início (b):**\n\n📅 {data_b}")
+    c_ini.metric("Início (b)", f"📅 {data_b}")
     
-    fim_str = f"📅 :red[{data_c}]" if "PERM" in str(data_c) else f"📅 {data_c}"
-    c_fim.markdown(f"**Fim (c):**\n\n{fim_str}")
+    fim_str = f"🛑 {data_c}" if "PERM" in str(data_c) else f"📅 {data_c}"
+    c_fim.metric("Fim (c)", fim_str)
 
-    # Movemos o Período (d) para aproveitar os ícones nativos do Streamlit
+    # 5. PERÍODO
     periodo = str(dados.get('d', '')).strip()
     if periodo and periodo not in ['nan', 'None']:
         st.write("") # Leve espaçamento
-        st.warning(f"**Período (d):** {periodo}", icon="🕒")
+        st.metric("Período (d)", f"🕒 {periodo}")
 
     st.divider()
 
-    # 5. TEXTO PRINCIPAL DO NOTAM (HTML Customizado)
-    st.markdown("**Texto (e):**")
+    # 6. TEXTO PRINCIPAL DO NOTAM
+    # Usando st.caption para manter o rótulo discreto como nos metrics
+    st.caption("Texto (e)")
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
     st.markdown(
@@ -92,7 +101,8 @@ def exibir_detalhes_popup(dados):
             border-radius: 8px;
             border-left: 5px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 14px;
+            font-size: 16px; 
+            font-weight: 500;
             white-space: pre-wrap;
             line-height: 1.5;
             margin-bottom: 1rem;
@@ -101,11 +111,19 @@ def exibir_detalhes_popup(dados):
         unsafe_allow_html=True
     )
 
-    # 6. DADOS BRUTOS (JSON)
+    # 7. DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
-        # Garante compatibilidade caso 'dados' seja um Dicionário ou uma Series do Pandas
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
+
+
+
+
+
+
+
+
+
 
 
 st.divider()
