@@ -19,97 +19,125 @@ if 'logado' not in st.session_state or not st.session_state['logado']:
 if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
+
+
+
 # ==============================================================================
-# FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal (Pop-up).
+# FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
 @st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
 
-    if str(dados.get('id')) in st.session_state['novos_ids']:
+    # --- INÍCIO DA INJEÇÃO DE CSS ---
+    st.markdown(
+        """
+        <style>
+        /* Tamanho intermediário para o valor em destaque */
+        [data-testid="stMetricValue"] {
+            font-size: 1.4rem !important; 
+        }
+        /* Título menor, colado no valor e em tom de CINZA */
+        [data-testid="stMetricLabel"] {
+            font-size: 0.9rem !important;
+            margin-bottom: -4px !important; 
+            color: #808080 !important; /* Cor cinza aplicada aqui */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    # --- FIM DA INJEÇÃO DE CSS ---
+
+    def linha_suave():
+        st.markdown("<hr style='margin: 1rem 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);'>", unsafe_allow_html=True)
+
+    # ALERTA DE NOVO NOTAM
+    if str(dados.get('id')) in st.session_state.get('novos_ids', []):
         st.success("✨ **NOVO:** Notificação recente!")
+        linha_suave()
 
-    st.divider()
-
-    # 1. Localidade
-    st.markdown(f"**Localidade:**")
-    st.markdown(f"## {dados.get('loc', '-')}")
-
-    # 2. Tipo e 3. Número
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Tipo:**")
-        st.info(f"{dados.get('tp', '-')}")
-    with c2:
-        st.markdown("**Número:**")
-        st.info(f"{dados.get('n', '-')}")
-
-    # 4. Referência
-    ref_val = dados.get('ref', '')
-    if ref_val and ref_val not in ['nan', 'None', '']:
-        st.markdown(f"**Referência:** {ref_val}")
+    # IDENTIFICAÇÃO PRINCIPAL (Linha 1)
+    col1, col2, col3, col4 = st.columns(4, gap="small")
+    col1.metric("Localidade", dados.get('loc', '-'))
+    col2.metric("Tipo", dados.get('tp', '-'))
+    col3.metric("Número", dados.get('n', '-'))
     
-    st.write("")
+    ref_val = str(dados.get('ref', '')).strip()
+    col4.metric("Referência", ref_val if ref_val and ref_val not in ['nan', 'None'] else "-")
 
-    c3, c4 = st.columns(2)
-    with c3:
-        st.markdown(f"**Assunto:**")
-        st.markdown(f"##### :{'green'}[{dados.get('assunto_desc', 'N/A')}]")
+    linha_suave()
+
+    # ASSUNTO E CONDIÇÃO (Linha 2)
+    c_assunto, c_cond = st.columns(2, gap="small")
     
-    with c4:
-        cond = dados.get('condicao_desc', 'N/A')
-        cor = "red" if any(x in cond for x in ['Fechado','Proibido','Inoperante']) else "orange" if "Obras" in cond else "green"
-        st.markdown(f"**Condição:**")
-        st.markdown(f"##### :{cor}[{cond}]")
+    c_assunto.metric("Assunto", dados.get('assunto_desc', 'N/A'))
+        
+    cond = dados.get('condicao_desc', 'N/A')
+    if any(x in cond for x in ['Fechado', 'Proibido', 'Inoperante']):
+        icone_cond = "🔴" 
+    elif "Obras" in cond:
+        icone_cond = "🟠"
+    else:
+        icone_cond = "🟢"
+        
+    c_cond.metric("Condição", f"{icone_cond} {cond}")
 
-    st.divider()
+    linha_suave()
 
-    # 7. Início e 8. Fim
+    # LINHA DO TEMPO: INÍCIO E FIM (Linha 3)
     data_b = formatters.formatar_data_notam(dados.get('b'))
     data_c = formatters.formatar_data_notam(dados.get('c'))
 
-    c_ini, c_fim = st.columns(2)
-    with c_ini:
-        st.markdown("**Início (b):**")
-        st.write(f"📅 {data_b}")
-    with c_fim:
-        st.markdown("**Fim (c):**")
-        if "PERM" in str(data_c):
-            st.write(f"📅 :red[{data_c}]")
-        else:
-            st.write(f"📅 {data_c}")
-
-    # 9. Período
-    periodo = dados.get('d', '')
-    if periodo and periodo not in ['nan', 'None', '']:
-        st.markdown("**Período (d):**")
-        st.warning(f"🕒 {periodo}")
-
-    st.divider()
-
-    # 10. Texto
-    st.markdown("**Texto (e):**")
-    texto_e = dados.get('e', 'Sem texto')
+    c_ini, c_fim = st.columns(2, gap="small")
+    c_ini.metric("Início (b)", f"📅 {data_b}")
     
+    fim_str = f"🛑 {data_c}" if "PERM" in str(data_c) else f"📅 {data_c}"
+    c_fim.metric("Fim (c)", fim_str)
+
+    # PERÍODO
+    periodo = str(dados.get('d', '')).strip()
+    if periodo and periodo not in ['nan', 'None']:
+        linha_suave()
+        st.metric("Período (d)", f"🕒 {periodo}")
+
+    linha_suave()
+
+    # TEXTO PRINCIPAL DO NOTAM
+    # Para deixar este rótulo cinza igual aos outros, usamos HTML rápido
+    st.markdown("**<span style='color: #808080; font-size: 0.9rem;'>Texto (e)</span>**", unsafe_allow_html=True)
+    texto_e = str(dados.get('e', 'Sem texto')).strip()
+    
+    # HTML com min-height garantindo altura mínima
     st.markdown(
         f"""
         <div style='
             background-color: rgba(128, 128, 128, 0.15);
-            padding: 15px;
+            padding: 12px 16px;
             border-radius: 8px;
             border-left: 5px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 14px;
+            font-size: 18px; 
+            font-weight: 500;
             white-space: pre-wrap;
-            line-height: 1.5;
-        '>{texto_e.strip()}</div>
+            line-height: 1.4;
+            margin-bottom: 0.5rem;
+            min-height: 150px; /* Garante espaço para aprox. 4 linhas */
+        '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
 
-    st.divider()
+    # NOVA LINHA DIVISÓRIA AQUI
+    st.write("\n")
+    linha_suave()
+    st.write("\n")
 
+    # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
-        st.json(dados.to_dict())
+        json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
+        st.json(json_data)
+
+
 
 
 st.divider()

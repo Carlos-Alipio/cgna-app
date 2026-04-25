@@ -22,6 +22,7 @@ if 'novos_ids' not in st.session_state:
 
 
 
+
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
@@ -32,15 +33,32 @@ def exibir_detalhes_popup(dados):
     st.markdown(
         """
         <style>
-        /* Tamanho intermediário para o valor em destaque */
+        /* 1. FAIXA LARANJA NO TÍTULO DO MODAL */
+        div[role="dialog"] header {
+            background-color: #FF8C00 !important; /* Cor Laranja (DarkOrange) */
+            border-bottom: 2px solid #E67E22 !important; /* Borda leve para dar profundidade */
+        }
+        
+        /* 2. TEXTO DO TÍTULO EM BRANCO E NEGRITO */
+        div[role="dialog"] header h2 {
+            color: white !important; 
+            font-weight: 800 !important;
+        }
+        
+        /* 3. BOTÃO DE FECHAR (X) EM BRANCO PARA DAR CONTRASTE */
+        div[role="dialog"] header button svg {
+            stroke: white !important;
+            fill: white !important;
+        }
+
+        /* 4. AJUSTES DOS CAMPOS METRIC (Mantidos das versões anteriores) */
         [data-testid="stMetricValue"] {
             font-size: 1.4rem !important; 
         }
-        /* Título menor, colado no valor e em tom de CINZA */
         [data-testid="stMetricLabel"] {
             font-size: 0.9rem !important;
             margin-bottom: -4px !important; 
-            color: #808080 !important; /* Cor cinza aplicada aqui */
+            color: #808080 !important; 
         }
         </style>
         """,
@@ -103,11 +121,9 @@ def exibir_detalhes_popup(dados):
     linha_suave()
 
     # TEXTO PRINCIPAL DO NOTAM
-    # Para deixar este rótulo cinza igual aos outros, usamos HTML rápido
     st.markdown("**<span style='color: #808080; font-size: 0.9rem;'>Texto (e)</span>**", unsafe_allow_html=True)
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
-    # HTML com min-height garantindo altura mínima
     st.markdown(
         f"""
         <div style='
@@ -116,26 +132,33 @@ def exibir_detalhes_popup(dados):
             border-radius: 8px;
             border-left: 5px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 18px; 
+            font-size: 15px; 
             font-weight: 500;
             white-space: pre-wrap;
             line-height: 1.4;
             margin-bottom: 0.5rem;
-            min-height: 150px; /* Garante espaço para aprox. 4 linhas */
+            min-height: 90px;
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
 
-    # NOVA LINHA DIVISÓRIA AQUI
-    st.write("\n")
     linha_suave()
-    st.write("\n")
 
     # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
+
+
+
+
+
+
+
+
+
+
 
 
 
