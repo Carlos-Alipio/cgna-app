@@ -33,20 +33,14 @@ def tratar_data_faa(data_str):
 # FUNÇÃO PRINCIPAL DE LIMPEZA
 # ==============================================================================
 def limpar_planilha_notams(arquivo):
-    # 1. Pular as 4 primeiras linhas de metadados e definir o enconding
-    df = pd.read_csv(arquivo, skiprows=4, encoding='latin1')
-    
-    # 2. Renomear as colunas para o padrão do Banco de Dados (snake_case)
-    colunas_map = {
-        'Location': 'loc',
-        'NOTAM #/LTA #': 'n', # Ou 'notam_id', adaptando ao seu banco
-        'Class': 'classe',
-        'Issue Date (UTC)': 'dt_emissao',
-        'Effective Date (UTC)': 'dt_inicio',   # Equivalente ao campo 'b'
-        'Expiration Date (UTC)': 'dt_fim',     # Equivalente ao campo 'c'
-        'NOTAM Condition/LTA subject/Construction graphic title': 'texto_bruto' # Equivalente ao 'e'
-    }
-    df = df.rename(columns=colunas_map)
+    # 1. Pular as 4 primeiras linhas e usar configurações robustas
+    df = pd.read_csv(
+        arquivo, 
+        skiprows=4, 
+        encoding='latin1', 
+        engine='python',         # Usa o motor Python (mais inteligente para lidar com textos complexos e quebras de linha)
+        on_bad_lines='skip'      # Se alguma linha vier totalmente quebrada, ele ignora a linha e salva o resto, sem travar o app
+    )
     
     # 3. Remover linhas vazias caso o CSV tenha sujeira no final
     df = df.dropna(subset=['loc', 'n'])
