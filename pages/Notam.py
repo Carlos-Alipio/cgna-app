@@ -26,22 +26,31 @@ if 'novos_ids' not in st.session_state:
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
-@st.dialog("Detalhes do NOTAM", width="large")
+# 1. LARGURA: Removido o width="large" para usar o tamanho normal (mais estreito)
+@st.dialog("Detalhes do NOTAM") 
 def exibir_detalhes_popup(dados):
 
     # --- INÍCIO DA INJEÇÃO DE CSS ---
-    # Esse bloco altera o tamanho apenas dos metrics exibidos na tela
+    # Foco extremo em compactação vertical (Alturas, Margens e Paddings)
     st.markdown(
         """
         <style>
-        /* Reduz o tamanho do conteúdo principal (o valor em destaque) */
+        /* Reduz o tamanho da fonte do valor do metric */
         [data-testid="stMetricValue"] {
-            font-size: 1.25rem !important; /* O padrão é por volta de 2rem. Diminua ou aumente aqui */
+            font-size: 1.1rem !important; 
         }
-        /* Opcional: Se quiser ajustar o tamanho do título do campo (Localidade, Tipo...) */
+        /* Reduz o tamanho do título do metric e aproxima MUITO do valor */
         [data-testid="stMetricLabel"] {
-            font-size: 0.85rem !important;
-            margin-bottom: -5px; /* Deixa o título um pouquinho mais colado no valor */
+            font-size: 0.8rem !important;
+            margin-bottom: -10px !important; 
+        }
+        /* Reduz o espaçamento geral das colunas e dos blocos no Streamlit */
+        [data-testid="stVerticalBlock"] {
+            gap: 0.3rem !important;
+        }
+        /* Compacta a altura da caixa de st.success / st.warning */
+        [data-testid="stAlert"] {
+            padding: 0.3rem 0.8rem !important;
         }
         </style>
         """,
@@ -49,26 +58,30 @@ def exibir_detalhes_popup(dados):
     )
     # --- FIM DA INJEÇÃO DE CSS ---
 
-    # 1. ALERTA DE NOVO NOTAM
+    # 2. ALTURA: Substituímos o st.divider() (que consome muito espaço) 
+    # por uma linha HTML customizada com margens mínimas.
+    def linha_compacta():
+        st.markdown("<hr style='margin: 0.4rem 0; border: none; border-top: 1px solid rgba(128,128,128,0.2);'>", unsafe_allow_html=True)
+
+    # ALERTA DE NOVO NOTAM
     if str(dados.get('id')) in st.session_state.get('novos_ids', []):
         st.success("✨ **NOVO:** Notificação recente!")
+        linha_compacta()
 
-    # 2. IDENTIFICAÇÃO PRINCIPAL (Linha 1)
-    col1, col2, col3, col4 = st.columns(4)
+    # 3. LARGURA: Adicionado gap="small" em todas as colunas
+    # IDENTIFICAÇÃO PRINCIPAL (Linha 1)
+    col1, col2, col3, col4 = st.columns(4, gap="small")
     col1.metric("Localidade", dados.get('loc', '-'))
     col2.metric("Tipo", dados.get('tp', '-'))
     col3.metric("Número", dados.get('n', '-'))
     
     ref_val = str(dados.get('ref', '')).strip()
-    if ref_val and ref_val not in ['nan', 'None']:
-        col4.metric("Referência", ref_val)
-    else:
-        col4.metric("Referência", "-")
+    col4.metric("Referência", ref_val if ref_val and ref_val not in ['nan', 'None'] else "-")
 
-    st.divider()
+    linha_compacta()
 
-    # 3. ASSUNTO E CONDIÇÃO (Linha 2)
-    c_assunto, c_cond = st.columns(2)
+    # ASSUNTO E CONDIÇÃO (Linha 2)
+    c_assunto, c_cond = st.columns(2, gap="small")
     
     c_assunto.metric("Assunto", dados.get('assunto_desc', 'N/A'))
         
@@ -82,49 +95,50 @@ def exibir_detalhes_popup(dados):
         
     c_cond.metric("Condição", f"{icone_cond} {cond}")
 
-    st.divider()
+    linha_compacta()
 
-    # 4. LINHA DO TEMPO: INÍCIO E FIM (Linha 3)
+    # LINHA DO TEMPO: INÍCIO E FIM (Linha 3)
     data_b = formatters.formatar_data_notam(dados.get('b'))
     data_c = formatters.formatar_data_notam(dados.get('c'))
 
-    c_ini, c_fim = st.columns(2)
+    c_ini, c_fim = st.columns(2, gap="small")
     c_ini.metric("Início (b)", f"📅 {data_b}")
     
     fim_str = f"🛑 {data_c}" if "PERM" in str(data_c) else f"📅 {data_c}"
     c_fim.metric("Fim (c)", fim_str)
 
-    # 5. PERÍODO
+    # PERÍODO
     periodo = str(dados.get('d', '')).strip()
     if periodo and periodo not in ['nan', 'None']:
-        st.write("") 
+        linha_compacta()
         st.metric("Período (d)", f"🕒 {periodo}")
 
-    st.divider()
+    linha_compacta()
 
-    # 6. TEXTO PRINCIPAL DO NOTAM
+    # TEXTO PRINCIPAL DO NOTAM
     st.caption("Texto (e)")
     texto_e = str(dados.get('e', 'Sem texto')).strip()
     
+    # 4. ALTURA: Reduzido o padding e line-height da caixa de HTML
     st.markdown(
         f"""
         <div style='
             background-color: rgba(128, 128, 128, 0.15);
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 5px solid #FF4B4B;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 4px solid #FF4B4B;
             font-family: "Source Code Pro", monospace;
-            font-size: 16px; 
+            font-size: 14px; 
             font-weight: 500;
             white-space: pre-wrap;
-            line-height: 1.5;
-            margin-bottom: 1rem;
+            line-height: 1.3;
+            margin-bottom: 0.2rem;
         '>{texto_e}</div>
         """,
         unsafe_allow_html=True
     )
 
-    # 7. DADOS BRUTOS (JSON)
+    # DADOS BRUTOS (JSON)
     with st.expander("🔍 Ver JSON Bruto"):
         json_data = dados.to_dict() if hasattr(dados, 'to_dict') else dict(dados)
         st.json(json_data)
