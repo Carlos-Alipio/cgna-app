@@ -20,13 +20,14 @@ if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
 
-
+st.write("\n")
 
 # ==============================================================================
 # FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal.
 # ==============================================================================
 @st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
+    st.write("\n")
     st.write("\n")
     st.write("\n")
     # --- INÍCIO DA INJEÇÃO DE CSS ---
