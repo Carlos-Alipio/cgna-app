@@ -33,16 +33,22 @@ def tratar_data_faa(data_str):
 # FUNÇÃO PRINCIPAL DE LIMPEZA
 # ==============================================================================
 def limpar_planilha_notams(arquivo):
+    # 0. Volta o ponteiro de leitura para o início (essencial no Streamlit)
+    arquivo.seek(0)
+    
     # 1. Pular as 4 primeiras linhas e usar configurações robustas
     df = pd.read_csv(
         arquivo, 
         skiprows=4, 
         encoding='latin1', 
-        engine='python',         # Usa o motor Python (mais inteligente para lidar com textos complexos e quebras de linha)
-        on_bad_lines='skip'      # Se alguma linha vier totalmente quebrada, ele ignora a linha e salva o resto, sem travar o app
+        engine='python',         
+        on_bad_lines='skip'      
     )
     
-    # 2. Renomear as colunas para o padrão do Banco de Dados (snake_case)
+    # 2. LIMPEZA DOS TÍTULOS: Remove espaços invisíveis do começo e do fim dos nomes das colunas
+    df.columns = df.columns.str.strip()
+    
+    # 3. Renomear as colunas
     colunas_map = {
         'Location': 'loc',
         'NOTAM #/LTA #': 'n', 
@@ -54,20 +60,29 @@ def limpar_planilha_notams(arquivo):
     }
     df = df.rename(columns=colunas_map)
     
-    # 3. Remover linhas vazias caso o CSV tenha sujeira no final
+    # --- SISTEMA DE ALERTA ---
+    # Se a renomeação falhar, o app não quebra. Ele avisa você na tela!
+    if 'loc' not in df.columns or 'n' not in df.columns:
+        st.error("⚠️ As colunas esperadas não foram encontradas no arquivo.")
+        st.warning("Veja abaixo as colunas que o Pandas conseguiu ler. Pode ser que o arquivo tenha mudado de formato (ou o skiprows=4 precise ser ajustado):")
+        st.write(df.columns.tolist())
+        st.stop() # Interrompe o código aqui para você poder ver a tela
+    # -------------------------
+
+    # 4. Remover linhas vazias
     df = df.dropna(subset=['loc', 'n'])
     
-    # 4. Tratar as Datas
+    # 5. Tratar as Datas
     df['dt_emissao'] = df['dt_emissao'].apply(tratar_data_faa)
     df['dt_inicio'] = df['dt_inicio'].apply(tratar_data_faa)
     df['dt_fim'] = df['dt_fim'].apply(tratar_data_faa)
     
-    # 5. Limpezas de texto
-    df['loc'] = df['loc'].str.strip().str.upper()
-    df['n'] = df['n'].str.strip()
-    df['classe'] = df['classe'].str.strip()
+    # 6. Limpezas de texto
+    df['loc'] = df['loc'].astype(str).str.strip().str.upper()
+    df['n'] = df['n'].astype(str).str.strip()
+    df['classe'] = df['classe'].astype(str).str.strip()
     
-    # Cria uma coluna indicando que a data é permanente (caso queira no Supabase)
+    # 7. Cria uma coluna indicando que a data é permanente
     df['is_perm'] = df['dt_fim'] == pd.Timestamp('2099-12-31 23:59:59')
 
     return df
