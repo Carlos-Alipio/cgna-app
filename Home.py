@@ -58,6 +58,7 @@ else:
     pg_home = st.Page("pages/inicio.py", title="Home", icon=":material/home:", default=True)
     pg_notam = st.Page("pages/Notam.py", title="Notam", icon=":material/connecting_airports:")
     pg_obras = st.Page("pages/Monitoramento_Obras.py", title="Gestão de Obras", icon=":material/construction:")
+    pg_faa = st.Page("pages/FAA.py", title="Importar FAA", icon=":material/description:")
     pg_config = st.Page("pages/Configuracoes.py", title="Configurações", icon=":material/settings:")
 
     pg = st.navigation({
