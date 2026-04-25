@@ -20,13 +20,11 @@ if 'novos_ids' not in st.session_state:
     st.session_state['novos_ids'] = []
 
 # ==============================================================================
-# FUNÇÃO DO POP-UP (MODAL)
+# FUNÇÃO DO POP-UP (MODAL) Exibe os detalhes do NOTAM em uma janela modal (Pop-up).
 # ==============================================================================
-@st.dialog("📌 Detalhes do NOTAM", width="large")
+@st.dialog("Detalhes do NOTAM", width="large")
 def exibir_detalhes_popup(dados):
-    """
-    Exibe os detalhes do NOTAM em uma janela modal (Pop-up).
-    """
+
     if str(dados.get('id')) in st.session_state['novos_ids']:
         st.success("✨ **NOVO:** Notificação recente!")
 
@@ -34,7 +32,7 @@ def exibir_detalhes_popup(dados):
 
     # 1. Localidade
     st.markdown(f"**Localidade (loc):**")
-    st.markdown(f"## 📍 {dados.get('loc', '-')}")
+    st.markdown(f"## {dados.get('loc', '-')}")
 
     # 2. Tipo e 3. Número
     c1, c2 = st.columns(2)
