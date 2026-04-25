@@ -50,7 +50,6 @@ def exibir_detalhes_popup(dados):
     
     st.write("")
 
-
     c3, c4 = st.columns(2)
     with c3:
         st.markdown(f"**Assunto:**")
